@@ -1,7 +1,13 @@
 (ocamllex lexer)
-
 (ocamlyacc parser_yacc)
-
 (library
  (name toylanglib)
- (modules lexer token ast parser_yacc parser_descent typechecker interpreter))
+ (modules lexer token ast parser_yacc parser_descent typechecker   ir
+  riscv
+  cfg_builder
+  dataflow
+  ir_optimizer
+  select
+  regalloc
+  emit_riscv)
+)

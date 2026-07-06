@@ -1,13 +1,6 @@
-(ocamllex lexer)
-(ocamlyacc parser_yacc)
+(ocamllex lexer)                   ; 必须保留！
+(menhir (modules parser_yacc))     ; 使用 menhir 替代 ocamlyacc
 (library
  (name toylanglib)
- (modules lexer token ast parser_yacc parser_descent typechecker   ir
-  riscv
-  cfg_builder
-  dataflow
-  ir_optimizer
-  select
-  regalloc
-  emit_riscv)
-)
+ (modules lexer ast parser_yacc)   ; 只保留前端必需的三个模块
+ (libraries menhirLib))

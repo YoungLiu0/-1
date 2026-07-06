@@ -3,6 +3,11 @@
 type program = stmt_seq
 and stmt_seq = stmt list
 
+(*The type representing SimPL types*)
+type typ =
+|TInt
+|TBool
+
 (* Statements *)
 and stmt =
   | IfStmt of

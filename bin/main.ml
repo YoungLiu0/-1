@@ -5,6 +5,7 @@ let file = ref ""
 let parser_type = ref "yacc"
 let print_ast = ref false
 let check_types = ref false
+let emit_asm = ref false
 
 let options =
   [ ( "--parser"
@@ -14,6 +15,7 @@ let options =
     , Arg.Set print_ast
     , " Print the Abstract Syntax Tree (AST) instead of interpreting" )
   ; "--check-types", Arg.Set check_types, " Perform type checking instead of interpreting"
+  ; "--emit-asm", Arg.Set emit_asm, " Compile to RISC-V assembly and output"
   ]
 ;;
 
@@ -36,7 +38,17 @@ let () =
       Printf.printf "%s\n" (Ast.string_of_program ast)
     else if !check_types then
       Printf.eprintf "Type checking not implemented yet.\n"
-    else
+    else if !emit_asm then begin
+      (* 编译流水线 *)
+      let ir_prog = Ir.translate_program ast in
+      let alloc_funcs = List.map (fun func ->
+        let cfg = Cfg_builder.build_cfg func in
+        let _ = Ir_optimizer.optimize cfg in
+        let mfunc = Select.select_function func cfg in
+        Regalloc.allocate_registers mfunc
+      ) ir_prog in
+      print_string (Emit_riscv.emit_program alloc_funcs)
+    end else
       Printf.eprintf "Interpretation not implemented yet.\n"
   with
   | Arg.Bad msg ->

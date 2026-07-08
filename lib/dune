@@ -2,5 +2,5 @@
 (menhir (modules parser_yacc))     ; 使用 menhir 替代 ocamlyacc
 (library
  (name toylanglib)
- (modules lexer ast parser_yacc)   ; 只保留前端必需的三个模块
+ (modules :standard)   ; 只保留前端必需的三个模块
  (libraries menhirLib))

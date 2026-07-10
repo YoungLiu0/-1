@@ -1,0 +1,213 @@
+/* test_large.tc - 综合编译器优化测试 */
+
+// 全局变量测试
+int g_counter = 0;
+int g_result = 0;
+
+// 测试1: 常量传播 + 常量折叠
+int test_constant_prop() {
+    int a = 10;
+    int b = 20;
+    int c = a + b;
+    int d = c * 2;
+    return d - 5;
+}
+
+// 测试2: 拷贝传播
+int test_copy_prop(int x) {
+    int a = x;
+    int b = a;
+    int c = b;
+    int result = c + 10;
+    return result;
+}
+
+// 测试3: 公共子表达式消除
+int test_cse(int x, int y) {
+    int a = x + y;
+    int b = x + y;
+    int c = x * 2;
+    int d = x * 2;
+    return a + b + c + d;
+}
+
+// 测试4: 死代码消除
+int test_dead_code(int flag) {
+    int unused1 = 100;
+    int unused2 = 200;
+    int used = flag * 2;
+    if (flag > 0) {
+        int temp = 999;
+        return used;
+    }
+    return used + 1;
+}
+
+// 测试5: 代数化简
+int test_algebra(int x) {
+    int a = x + 0;
+    int b = x * 1;
+    int c = x * 0;
+    int d = x - 0;
+    int e = 0 + x;
+    return a + b + c + d + e;
+}
+
+// 测试6: 控制流优化 - 不可达代码消除
+int test_unreachable(int x) {
+    if (1) {
+        return x + 10;
+    }
+    int dead = 999;
+    return dead;
+}
+
+// 测试7: 循环中的优化
+int test_loop(int n) {
+    int sum = 0;
+    int i = 0;
+    int constant = 5;
+    while (i < n) {
+        int copy = constant;
+        sum = sum + copy * 2;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// 测试8: 嵌套控制流 + 多种优化
+int test_nested(int a, int b) {
+    int x = 10;
+    int y = 20;
+    int z = 0;
+    int result = 0;
+    if (a > 0) {
+        z = x + y;
+        if (b > 0) {
+            int temp1 = z;
+            int temp2 = temp1;
+            result = temp2 * 2;
+        } else {
+            result = z + 10;
+        }
+    } else {
+        result = 0;
+    }
+    return result;
+}
+
+// 测试9: 函数调用与全局变量
+int helper(int x) {
+    return x * x;
+}
+
+int test_global_and_call(int n) {
+    int local1 = 100;
+    int local2 = local1;
+    g_counter = n;
+    g_result = helper(local2);
+    return g_result + g_counter;
+}
+
+// 测试10: 复杂表达式
+int test_complex_expr(int a, int b, int c) {
+    int x = (a + b) * 2;
+    int y = (a + b) * 2;
+    int z = x + y;
+    int w = (c * 3) - (c * 3);
+    return z + w;
+}
+
+// 测试11: 短路求值
+int test_short_circuit(int x, int y) {
+    int result = 0;
+    if (x > 0 && y > 0) {
+        result = 1;
+    } else {
+        result = 0;
+    }
+    if (x < 0 || y < 0) {
+        result = result + 10;
+    }
+    return result;
+}
+
+// 测试12: 多层嵌套循环
+int test_nested_loop(int n) {
+    int sum = 0;
+    int i = 0;
+    int constant = 3;
+    while (i < n) {
+        int j = 0;
+        while (j < n) {
+            int temp = constant;
+            sum = sum + temp;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return sum;
+}
+
+// 测试13: 条件表达式的常量折叠
+int test_conditional_const(int x) {
+    int result = 0;
+    if (5 > 3) {
+        result = x + 10;
+    } else {
+        result = x - 10;
+    }
+    return result;
+}
+
+// 测试14: 复杂的数据流
+int test_dataflow(int input) {
+    int a = input;
+    int b = a + 5;
+    int c = 0;
+    int d = 0;
+    if (input > 10) {
+        c = b * 2;
+        d = c + a;
+    } else {
+        c = b * 3;
+        d = c - a;
+    }
+    int e = d + b;
+    return e;
+}
+
+// 主函数 - 综合测试
+int main() {
+    int result = 0;
+    int temp = 0;
+    temp = test_constant_prop();
+    result = result + temp;
+    temp = test_copy_prop(42);
+    result = result + temp;
+    temp = test_cse(10, 20);
+    result = result + temp;
+    temp = test_dead_code(5);
+    result = result + temp;
+    temp = test_algebra(100);
+    result = result + temp;
+    temp = test_unreachable(7);
+    result = result + temp;
+    temp = test_loop(10);
+    result = result + temp;
+    temp = test_nested(1, 1);
+    result = result + temp;
+    temp = test_global_and_call(8);
+    result = result + temp;
+    temp = test_complex_expr(5, 10, 20);
+    result = result + temp;
+    temp = test_short_circuit(5, 3);
+    result = result + temp;
+    temp = test_nested_loop(5);
+    result = result + temp;
+    temp = test_conditional_const(50);
+    result = result + temp;
+    temp = test_dataflow(15);
+    result = result + temp;
+    return result;
+}

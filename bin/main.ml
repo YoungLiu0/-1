@@ -2,20 +2,18 @@ open Toylanglib
 
 let usage = "Usage: toylang [options] <file>"
 let file = ref ""
-let parser_type = ref "yacc"
 let print_ast = ref false
 let check_types = ref false
 let emit_asm = ref false
+let enable_opt = ref false
 
 let options =
-  [ ( "--parser"
-    , Arg.Symbol ([ "yacc"; "descent" ], fun s -> parser_type := s)
-    , " Choose parser type: yacc or descent (default: yacc)" )
-  ; ( "--print-ast"
+  [ ( "--print-ast"
     , Arg.Set print_ast
     , " Print the Abstract Syntax Tree (AST) instead of interpreting" )
   ; "--check-types", Arg.Set check_types, " Perform type checking instead of interpreting"
   ; "--emit-asm", Arg.Set emit_asm, " Compile to RISC-V assembly and output"
+  ; "-opt", Arg.Set enable_opt, " Enable optimizations"
   ]
 ;;
 
@@ -25,14 +23,16 @@ let parse_args () =
     then file := filename
     else raise (Arg.Bad "Only one input file can be specified")
   in
-  Arg.parse options anon_fun usage;
-  if !file = "" then raise (Arg.Bad "No input file specified")
+  Arg.parse options anon_fun usage
 ;;
 
 let () =
   try
     parse_args ();
-    let lexbuf = Lexing.from_channel (open_in !file) in
+    let lexbuf =
+      if !file = "" then Lexing.from_channel stdin
+      else Lexing.from_channel (open_in !file)
+    in
     let ast = Parser_yacc.program Lexer.read lexbuf in
     if !print_ast then
       Printf.printf "%s\n" (Ast.string_of_program ast)
@@ -40,7 +40,12 @@ let () =
       Printf.eprintf "Type checking not implemented yet.\n"
     else if !emit_asm then begin
       let ir_prog = Ir.translate_program ast in
-      let optimized_funcs = List.map Ir_optimizer.optimize_func ir_prog.functions in
+      let optimized_funcs =
+        if !enable_opt then
+          List.map Ir_optimizer.optimize_func ir_prog.functions
+        else
+          ir_prog.functions
+      in
       let mach_prog = Select.select_program { ir_prog with functions = optimized_funcs } in
       let alloc_funcs = List.map Regalloc.allocate_registers mach_prog.functions in
       print_string (Emit_riscv.emit_program mach_prog.globals alloc_funcs)

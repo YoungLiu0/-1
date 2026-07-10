@@ -1,0 +1,909 @@
+=== After CFG build ===
+Label .L0
+Alloc
+Store
+Alloc
+Store
+Load
+Load
+BinOp +
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+BinOp -
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L0
+Store
+Store
+Load
+Load
+BinOp +
+Store
+Load
+BinOp ?
+Store
+Load
+BinOp -
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L1
+Load
+Alloc
+Store
+Load
+Alloc
+Store
+Load
+Alloc
+Store
+Load
+BinOp +
+Alloc
+Store
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L1
+Load
+Store
+Load
+Store
+Load
+Store
+Load
+BinOp +
+Store
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L2
+Load
+Load
+BinOp +
+Alloc
+Store
+Load
+Load
+BinOp +
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L2
+Load
+Load
+BinOp +
+Store
+Load
+Load
+BinOp +
+Store
+Load
+BinOp ?
+Store
+Load
+BinOp ?
+Store
+Load
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L3
+Alloc
+Store
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+BinOp ?
+BranchZero -> if_end_2
+Label then_0
+Alloc
+Store
+Load
+Ret(Some)
+Label if_end_2
+Load
+BinOp +
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L3
+Store
+Store
+Load
+BinOp ?
+Store
+BranchZero -> if_end_2
+Label then_0
+Store
+Load
+Ret(Some)
+Label if_end_2
+Load
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L4
+Load
+BinOp +
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+BinOp ?
+Alloc
+Store
+Load
+BinOp -
+Alloc
+Store
+Load
+BinOp +
+Alloc
+Store
+Load
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L4
+Load
+Store
+Load
+Store
+Move
+Store
+Load
+Store
+Load
+Store
+Load
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Load
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label then_0
+Load
+BinOp +
+Ret(Some)
+Label if_end_2
+Alloc
+Store
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label then_0
+Load
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L5
+Alloc
+Store
+Alloc
+Store
+Alloc
+Store
+Label while_start_0
+Load
+Load
+BinOp ?
+BranchZero -> while_end_2
+Label while_body_1
+Load
+Alloc
+Store
+Load
+Load
+BinOp ?
+BinOp +
+Store
+Load
+BinOp +
+Store
+Jump while_start_0
+Label while_end_2
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L5
+Store
+Store
+Store
+Label while_start_0
+BranchZero -> while_end_2
+Label while_body_1
+Load
+Store
+Load
+Load
+BinOp ?
+BinOp +
+Store
+Load
+BinOp +
+Store
+Jump while_start_0
+Label while_end_2
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L6
+Alloc
+Store
+Alloc
+Store
+Alloc
+Store
+Alloc
+Store
+Load
+BinOp ?
+BranchZero -> else_1
+Label then_0
+Load
+Load
+BinOp +
+Store
+Load
+BinOp ?
+BranchZero -> else_4
+Label then_3
+Load
+Alloc
+Store
+Load
+Alloc
+Store
+Load
+BinOp ?
+Store
+Jump if_end_5
+Label else_4
+Load
+BinOp +
+Store
+Label if_end_5
+Jump if_end_2
+Label else_1
+Store
+Label if_end_2
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L6
+Store
+Store
+Store
+Store
+BranchZero -> else_1
+Label then_0
+Load
+Load
+BinOp +
+Store
+BranchZero -> else_4
+Label then_3
+Load
+Store
+Load
+Store
+Load
+BinOp ?
+Store
+Jump if_end_5
+Label else_4
+Load
+BinOp +
+Store
+Label if_end_5
+Jump if_end_2
+Label else_1
+Store
+Label if_end_2
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L7
+Load
+Load
+BinOp ?
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L7
+Load
+Load
+BinOp ?
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L8
+Alloc
+Store
+Load
+Alloc
+Store
+Load
+Other
+Load
+Call
+Other
+Other
+Other
+BinOp +
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L8
+Store
+Load
+Store
+Load
+Other
+Load
+Call
+Other
+Other
+Other
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L9
+Load
+Load
+BinOp +
+BinOp ?
+Alloc
+Store
+Load
+Load
+BinOp +
+BinOp ?
+Alloc
+Store
+Load
+Load
+BinOp +
+Alloc
+Store
+Load
+BinOp ?
+Load
+BinOp ?
+BinOp -
+Alloc
+Store
+Load
+Load
+BinOp +
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L9
+Load
+Load
+BinOp +
+BinOp ?
+Store
+Load
+Load
+BinOp +
+BinOp ?
+Store
+Load
+Load
+BinOp +
+Store
+Load
+BinOp ?
+Load
+BinOp ?
+BinOp -
+Store
+Load
+Load
+BinOp +
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L10
+Alloc
+Store
+Load
+BinOp ?
+BranchZero -> and_false_3
+Label .L11
+Load
+BinOp ?
+Move
+Jump and_end_4
+Label and_false_3
+Move
+Label and_end_4
+BranchZero -> else_1
+Label then_0
+Store
+Jump if_end_2
+Label else_1
+Store
+Label if_end_2
+Load
+BinOp ?
+BranchNonZero -> or_true_8
+Label .L12
+Load
+BinOp ?
+Move
+Jump or_end_9
+Label or_true_8
+Move
+Label or_end_9
+BranchZero -> if_end_7
+Label then_5
+Load
+BinOp +
+Store
+Label if_end_7
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L10
+Store
+BranchZero -> and_false_3
+Label .L11
+Jump and_end_4
+Label and_false_3
+Label and_end_4
+BranchZero -> else_1
+Label then_0
+Store
+Jump if_end_2
+Label else_1
+Store
+Label if_end_2
+BranchNonZero -> or_true_8
+Label .L12
+Jump or_end_9
+Label or_true_8
+Label or_end_9
+BranchZero -> if_end_7
+Label then_5
+Load
+BinOp +
+Store
+Label if_end_7
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L13
+Alloc
+Store
+Alloc
+Store
+Alloc
+Store
+Label while_start_0
+Load
+Load
+BinOp ?
+BranchZero -> while_end_2
+Label while_body_1
+Alloc
+Store
+Label while_start_3
+Load
+Load
+BinOp ?
+BranchZero -> while_end_5
+Label while_body_4
+Load
+Alloc
+Store
+Load
+Load
+BinOp +
+Store
+Load
+BinOp +
+Store
+Jump while_start_3
+Label while_end_5
+Load
+BinOp +
+Store
+Jump while_start_0
+Label while_end_2
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L13
+Store
+Store
+Store
+Label while_start_0
+BranchZero -> while_end_2
+Label while_body_1
+Store
+Label while_start_3
+BranchZero -> while_end_5
+Label while_body_4
+Load
+Store
+Load
+Load
+BinOp +
+Store
+Load
+BinOp +
+Store
+Jump while_start_3
+Label while_end_5
+Load
+BinOp +
+Store
+Jump while_start_0
+Label while_end_2
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L14
+Alloc
+Store
+BinOp ?
+BranchZero -> else_1
+Label then_0
+Load
+BinOp +
+Store
+Jump if_end_2
+Label else_1
+Load
+BinOp -
+Store
+Label if_end_2
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L14
+Store
+BranchZero -> else_1
+Label then_0
+Load
+BinOp +
+Store
+Jump if_end_2
+Label else_1
+Load
+BinOp -
+Store
+Label if_end_2
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L15
+Load
+Alloc
+Store
+Load
+BinOp +
+Alloc
+Store
+Alloc
+Store
+Alloc
+Store
+Load
+BinOp ?
+BranchZero -> else_1
+Label then_0
+Load
+BinOp ?
+Store
+Load
+Load
+BinOp +
+Store
+Jump if_end_2
+Label else_1
+Load
+BinOp ?
+Store
+Load
+Load
+BinOp -
+Store
+Label if_end_2
+Load
+Load
+BinOp +
+Alloc
+Store
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L15
+Load
+Store
+Load
+BinOp +
+Store
+Store
+Store
+BranchZero -> else_1
+Label then_0
+Load
+BinOp ?
+Store
+Load
+Load
+BinOp +
+Store
+Jump if_end_2
+Label else_1
+Load
+BinOp ?
+Store
+Load
+Load
+BinOp -
+Store
+Label if_end_2
+Load
+Load
+BinOp +
+Store
+Load
+Ret(Some)
+=== end After optimization ===
+=== After CFG build ===
+Label .L16
+Alloc
+Store
+Alloc
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Load
+Ret(Some)
+=== end After CFG build ===
+=== After optimization ===
+Label .L16
+Store
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Call
+Store
+Load
+Load
+BinOp +
+Store
+Load
+Ret(Some)
+=== end After optimization ===

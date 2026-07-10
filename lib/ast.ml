@@ -89,6 +89,9 @@ let string_of_program (prog : program) =
         let ret = match f.f_type with Int -> "int" | Void -> "void" in
         "function " ^ ret ^ " " ^ f.f_name ^ "(" ^ params ^ ") " ^ string_of_stmt f.f_body
         ^ "\n" ^ aux rest
-    | _ :: rest -> aux rest
+    | GlobalVarDecl (x, e) :: rest ->
+        "int " ^ x ^ " = " ^ string_of_expr e ^ ";\n" ^ aux rest
+    | GlobalConstDecl (x, e) :: rest ->
+        "const int " ^ x ^ " = " ^ string_of_expr e ^ ";\n" ^ aux rest
   in
   aux prog

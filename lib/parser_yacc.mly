@@ -27,15 +27,22 @@ open Ast
 %%
 
 program:
-  | func_def EOF { [FuncDef $1] }
+  | top_defs EOF { $1 }
+
+top_defs:
+  | top_def          { [$1] }
+  | top_def top_defs { $1 :: $2 }
+
+top_def:
+  | func_def { FuncDef $1 }
+  | INT ID ASSIGN expr SEMI          { GlobalVarDecl ($2, $4) }
+  | CONST INT ID ASSIGN expr SEMI    { GlobalConstDecl ($3, $5) }
 
 func_def:
-  | typ ID LPAREN params RPAREN block
-      { { f_name = $2; f_type = $1; f_params = $4; f_body = $6 } }
-
-typ:
-  | INT  { Int }
-  | VOID { Void }
+  | INT ID LPAREN params RPAREN block
+      { { f_name = $2; f_type = Int; f_params = $4; f_body = $6 } }
+  | VOID ID LPAREN params RPAREN block
+      { { f_name = $2; f_type = Void; f_params = $4; f_body = $6 } }
 
 params:
   | /* empty */ { [] }

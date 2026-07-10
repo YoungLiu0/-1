@@ -39,15 +39,11 @@ let () =
     else if !check_types then
       Printf.eprintf "Type checking not implemented yet.\n"
     else if !emit_asm then begin
-      (* 编译流水线 *)
       let ir_prog = Ir.translate_program ast in
-      let alloc_funcs = List.map (fun func ->
-        let cfg = Cfg_builder.build_cfg func in
-        let _ = Ir_optimizer.optimize cfg in
-        let mfunc = Select.select_function func cfg in
-        Regalloc.allocate_registers mfunc
-      ) ir_prog in
-      print_string (Emit_riscv.emit_program alloc_funcs)
+      let optimized_funcs = List.map Ir_optimizer.optimize_func ir_prog.functions in
+      let mach_prog = Select.select_program { ir_prog with functions = optimized_funcs } in
+      let alloc_funcs = List.map Regalloc.allocate_registers mach_prog.functions in
+      print_string (Emit_riscv.emit_program mach_prog.globals alloc_funcs)
     end else
       Printf.eprintf "Interpretation not implemented yet.\n"
   with

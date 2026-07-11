@@ -20,7 +20,9 @@ let string_contains (s : string) (sub : string) : bool =
 let emit_function (func : Regalloc.alloc_function) : string =
   let buf = Buffer.create 1024 in
   let prefix = func.name ^ "."in
-  let label name = prefix ^ name in
+  let label name = 
+    if name = func.name then name 
+    else prefix ^ name in
   List.iter (fun instr ->
     match instr with
        | Label name ->

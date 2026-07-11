@@ -212,17 +212,20 @@ let select_function (func : ir_func) : machine_func =
   in
 
    (* 为每个参数生成 sw 指令，把 a0‑a7 存入对应的栈槽 *)
-let save_params =
+ let save_params =
   List.mapi (fun i param ->
     let offset = get_var_offset param in
     if i < 8 then
+      (* 前 8 个参数：从 a0-a7 读取 *)
       [Sw (PhysReg (Printf.sprintf "a%d" i), offset, PhysReg "fp")]
     else
+      (* 第 9+ 个参数：从调用者的栈帧读取 *)
       let caller_offset = (i - 8) * 4 in
       let tmp = fresh_tmp () in
       [
-        (* 调用者压入的额外参数位于 fp + frame_aligned + 4 + caller_offset *)
-        Lw (tmp, caller_offset + frame_aligned + 4, PhysReg "fp");
+        (* 从调用者栈帧读取参数（相对于当前 fp 的正偏移） *)
+        Lw (tmp, caller_offset + frame_aligned, PhysReg "fp");
+        (* 保存到当前函数的栈帧 *)
         Sw (tmp, offset, PhysReg "fp")
       ]
   ) func.params

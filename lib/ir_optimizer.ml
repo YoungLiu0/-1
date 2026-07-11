@@ -299,10 +299,6 @@ let dump_instrs title instrs =
 
 let optimize_func (func : Ir.ir_func) : Ir.ir_func =
   let cfg = Cfg_builder.build_cfg func in
-  let linear_after_build = Cfg.cfg_to_linear cfg in
-  dump_instrs "After CFG build" linear_after_build;
-
   let optimized_cfg = optimize_cfg cfg in
-  let linear_after_opt = Cfg.cfg_to_linear optimized_cfg in
-  dump_instrs "After optimization" linear_after_opt;
-  { func with body = linear_after_opt }
+  let body = Cfg.cfg_to_linear optimized_cfg in
+  { func with body }

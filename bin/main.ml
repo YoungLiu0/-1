@@ -48,7 +48,9 @@ let () =
       in
       let mach_prog = Select.select_program { ir_prog with functions = optimized_funcs } in
       let alloc_funcs = List.map Regalloc.allocate_registers mach_prog.functions in
-      print_string (Emit_riscv.emit_program mach_prog.globals alloc_funcs)
+     let asm = Emit_riscv.emit_program mach_prog.globals alloc_funcs in
+      print_string asm;
+      flush stdout
     end else
       Printf.eprintf "Interpretation not implemented yet.\n"
   with

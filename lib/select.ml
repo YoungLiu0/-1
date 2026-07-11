@@ -95,21 +95,51 @@ let select_function (func : ir_func) : machine_func =
 
     (* 函数调用 *)
     | Call (dest, func_name, args) ->
-        let arg_regs = ["a0"; "a1"; "a2"; "a3"; "a4"; "a5"; "a6"; "a7"] in
-        let move_args = List.mapi (fun i arg ->
-          if i >= 8 then failwith "More than 8 arguments not supported yet";
-          let target = PhysReg (List.nth arg_regs i) in
+      let num_args = List.length args in
+      let stack_args = if num_args > 8 then num_args -8 else 0 in
+      let stack_space = stack_args *4 in
+
+      let alloc_stack =
+        if stack_args > 0 then
+          [Addi (PhysReg "sp",PhysReg "sp",-stack_space)]
+      else []
+        in
+        let reg_args = if num_args > 8 then 8 else num_args in
+        let move_reg_args =List.concat (List.init reg_args (fun i ->
+          let arg = List.nth args i in
+          let target = PhysReg (Printf.sprintf "a%d" i) in
           match arg with
           | Imm n ->
               let tmp = VReg (100 + i) in
               [Li (tmp, n); Mv (target, tmp)]
           | _ -> [Mv (target, operand_to_reg arg)]
-        ) args in
-        let arg_instrs = List.concat move_args in
+        )) in
+        
+        (* 将第 9 个及以后的参数压入栈 *)
+        let move_stack_args = List.concat (List.init stack_args (fun i ->
+          let arg = List.nth args (8 + i) in
+          let offset = i * 4 in
+          match arg with
+          | Imm n ->
+              let tmp = VReg (200 + i) in
+              [Li (tmp, n); Sw (tmp, offset, PhysReg "sp")]
+          | _ ->
+              [Sw (operand_to_reg arg, offset, PhysReg "sp")]
+        )) in
+        
         let call_instr = [Call func_name] in
+        
+        (* 释放栈参数空间 *)
+        let free_stack =
+          if stack_args > 0 then
+            [Addi (PhysReg "sp", PhysReg "sp", stack_space)]
+          else []
+        in
+        
         let rd = operand_to_reg dest in
         let result_move = [Mv (rd, PhysReg "a0")] in
-        arg_instrs @ call_instr @ result_move
+        
+        alloc_stack @ move_reg_args @ move_stack_args @ call_instr @ free_stack @ result_move
 
     | Move (dest, Imm n) ->
         let rd = operand_to_reg dest in
@@ -182,10 +212,25 @@ let select_function (func : ir_func) : machine_func =
   in
 
    (* 为每个参数生成 sw 指令，把 a0‑a7 存入对应的栈槽 *)
-  let save_params = List.mapi (fun i param ->
+ let save_params =
+  List.mapi (fun i param ->
     let offset = get_var_offset param in
-    Sw (PhysReg (Printf.sprintf "a%d" i), offset, PhysReg "fp")
-  ) func.params in
+    if i < 8 then
+      (* 前 8 个参数：从 a0-a7 读取 *)
+      [Sw (PhysReg (Printf.sprintf "a%d" i), offset, PhysReg "fp")]
+    else
+      (* 第 9+ 个参数：从调用者的栈帧读取 *)
+      let caller_offset = (i - 8) * 4 in
+      let tmp = fresh_tmp () in
+      [
+        (* 从调用者栈帧读取参数（相对于当前 fp 的正偏移） *)
+        Lw (tmp, caller_offset + frame_aligned, PhysReg "fp");
+        (* 保存到当前函数的栈帧 *)
+        Sw (tmp, offset, PhysReg "fp")
+      ]
+  ) func.params
+  |> List.concat
+in
   let prologue = [FrameSetup frame_aligned] in
   let body_instrs = List.concat_map select_instr func.body in
   let instrs = Label func.name :: prologue @ save_params @ body_instrs in

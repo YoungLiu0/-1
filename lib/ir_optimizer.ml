@@ -222,9 +222,13 @@ let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
             | _ -> None
           in
           (* 判断是否为死代码 *)
-          let is_dead = match def_var with
-            | Some v -> not (List.mem v live_after) && not (has_side_effect instr)
-            | None -> false
+          let is_temp_def = function
+  | Some v -> String.length v > 0 && v.[0] = 't'
+  | None -> false
+in
+let is_dead = match def_var with
+  | Some v -> not (List.mem v live_after) && not (has_side_effect instr) && not (is_temp_def (Some v))
+  | None -> false
           in
           if is_dead then
             (* 跳过死指令 *)
@@ -271,7 +275,7 @@ let optimize_cfg (cfg : Cfg.t) : Cfg.t =
   |> optimize_cfg_local                (* 传播后再做一遍局部优化 *)
   |> unreachable_code_elimination
   |> dead_code_elimination
-  |> optimize_cfg_local  (* 再做一遍局部优化清理 *)
+  |> optimize_cfg_local  
 
   (** 对单个 ir_func 进行优化，返回优化后的 ir_func *)
 

@@ -19,6 +19,7 @@ mul:
   sw s11, -56(fp)
   sw a0, -60(fp)
   sw a1, -64(fp)
+mul..L0:
   lw t0, -64(fp)
   lw t1, -60(fp)
   mul t2, t1, t0
@@ -70,6 +71,7 @@ compute:
   sw t0, -92(fp)
   lw t0, 4(fp)
   sw t0, -96(fp)
+compute..L1:
   lw t0, -96(fp)
   lw t1, -92(fp)
   lw t2, -88(fp)
@@ -149,6 +151,7 @@ main:
   sw s9, -48(fp)
   sw s10, -52(fp)
   sw s11, -56(fp)
+main..L2:
   addi sp, sp, -28
   sw t0, 0(sp)
   sw t1, 4(sp)

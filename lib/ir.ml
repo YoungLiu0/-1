@@ -54,10 +54,13 @@ type ir_global = {
 let unique_var_counter = ref 0
 
 let global_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
-
+let local_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
 let rec eval_const_expr = function
  | Ast.IntLit n -> Some n
-  | Ast.Var name -> (try Some (Hashtbl.find global_const_table name) with Not_found -> None)
+  | Ast.Var name ->  (try Some (Hashtbl.find local_const_table name)
+       with Not_found ->
+         try Some (Hashtbl.find global_const_table name)
+         with Not_found -> None)
   | Ast.Unary (Neg, e) -> Option.map (fun x -> -x) (eval_const_expr e)
   | Ast.Unary (Pos, e) -> eval_const_expr e
   | Ast.Binary (Add, e1, e2) ->
@@ -225,6 +228,7 @@ and translate_func (f : Ast.func_def) : ir_func =
   reset_locals ();
   symbol_stack := [];
   loop_stack := [];
+  Hashtbl.clear local_const_table;   (* ← 新增这一行 *)
   enter_scope ();      (* 函数级作用域 *)
   (* 将全局变量加入符号表（所有函数都能看到全局变量） *)
   List.iter (fun g ->
@@ -284,7 +288,7 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
  | Ast.ConstDecl (name, init_expr) ->
     let const_value = eval_const_expr init_expr in
     (match const_value with
-     | Some _ -> ()
+     | Some v->Hashtbl.add local_const_table name v
      | None -> failwith ("Local constant '" ^ name ^ "' must have a compile-time value"));
     (match lookup_current_scope name with
      | Some _ -> failwith ("Constant " ^ name ^ " already declared")

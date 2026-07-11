@@ -38,7 +38,7 @@ let () =
       Printf.printf "%s\n" (Ast.string_of_program ast)
     else if !check_types then
       Printf.eprintf "Type checking not implemented yet.\n"
-    else if !emit_asm then begin
+    else begin
       let ir_prog = Ir.translate_program ast in
       let optimized_funcs =
         if !enable_opt then
@@ -51,8 +51,7 @@ let () =
      let asm = Emit_riscv.emit_program mach_prog.globals alloc_funcs in
       print_string asm;
       flush stdout
-    end else
-      Printf.eprintf "Interpretation not implemented yet.\n"
+    end 
   with
   | Arg.Bad msg ->
     Printf.eprintf "%s: %s\n" Sys.argv.(0) msg;

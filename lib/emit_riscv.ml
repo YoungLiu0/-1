@@ -1,7 +1,7 @@
 (** 汇编发射：将机器 IR 转为 RISC-V 汇编文本 *)
 
 open Riscv
-
+open Regalloc
 let reg_to_string = function
   | PhysReg name -> name
   | VReg n -> Printf.sprintf "t%d" (n mod 7)
@@ -23,7 +23,7 @@ let emit_function (func : Regalloc.alloc_function) : string =
   List.iter (fun instr ->
     match instr with
        | Label name ->
-        Buffer.add_string buf (Printf.sprintf "  .globl %s\n%s:\n" name name)
+         Buffer.add_string buf (Printf.sprintf "%s:\n" name)
     
     | FrameSetup size ->
         Buffer.add_string buf (Printf.sprintf "  addi sp, sp, -%d\n" size);
@@ -160,10 +160,9 @@ let emit_program (globals : Ir.ir_global list) (funcs : Regalloc.alloc_function 
   in
    let text_section =
     "  .text\n" ^
-    String.concat "" (List.map emit_function funcs)
+    String.concat "\n" (List.map (fun func ->
+      (* 给每个函数的入口标签加 .globl 声明 *)
+      Printf.sprintf "  .globl %s\n%s" func.name (emit_function func)
+    ) funcs)
   in
-   let asm = data_section ^ text_section in
-    if not (string_contains asm "main:") then
-    asm ^ "\nmain:\n  li a0, 0\n  ret\n"
-  else
-    asm
+  data_section ^ text_section

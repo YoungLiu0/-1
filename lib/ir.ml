@@ -75,7 +75,10 @@ let lookup_symbol name =
   in
   search !symbol_stack
 
-
+let lookup_current_scope name=
+  match !symbol_stack with
+  |[]->None
+  |current::_->StringMap.find_opt name current
 let reset_globals () = global_vars := []
 
 (* ---- IR 函数 ---- *)
@@ -226,7 +229,7 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
   | Ast.EmptyStmt -> []
   
   | Ast.VarDecl (name, init_expr) ->
-      (match lookup_symbol name with
+      (match lookup_current_scope name with
        | Some _ -> failwith ("Variable " ^ name ^ " already declared")
        | None -> ());
       add_symbol name false None false;
@@ -237,7 +240,7 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
   | Ast.ConstDecl (name, init_expr) ->
       let (init_instrs, init_val) = translate_expr init_expr in
       let const_value = match init_val with Imm n -> Some n | _ -> None in
-      (match lookup_symbol name with
+      (match lookup_current_scope name with
        | Some _ -> failwith ("Constant " ^ name ^ " already declared")
        | None -> ());
       add_symbol name true const_value false;
@@ -394,3 +397,4 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
       let arg_ops = List.map snd arg_instrs in
       let dest = fresh_temp () in
       (instrs @ [Call (dest, func_name, arg_ops)], dest)
+

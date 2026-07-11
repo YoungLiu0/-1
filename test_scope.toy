@@ -1,0 +1,49 @@
+int shadow_test(int a, int b)
+{
+    int sum = 0;
+
+    {
+        int a = a + 1;
+        sum = sum + a;
+    }
+
+    {
+        int x = 10;
+        {
+            int x = 20;
+            {
+                x = 30;
+            }
+            sum = sum + x;
+        }
+        sum = sum + x;
+    }
+
+    {
+        int i = 100;
+        int k = 0;
+        int loop_i = 0;
+        while (loop_i < 3)
+        {
+            int i = loop_i;
+            k = k + i;
+            loop_i = loop_i + 1;
+        }
+        sum = sum + i;
+        sum = sum + k;
+    }
+
+    {
+        int b = b * 2;
+        sum = sum + b;
+    }
+    sum = sum + b;
+
+    return sum;
+}
+
+int main()
+{
+    int result = shadow_test(5, 3);
+    return result;
+}

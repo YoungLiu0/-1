@@ -32,7 +32,6 @@ let emit_function (func : Regalloc.alloc_function) : string =
         Buffer.add_string buf (Printf.sprintf "  addi sp, sp, -%d\n" size);
         Buffer.add_string buf (Printf.sprintf "  sw ra, %d(sp)\n" (size - 4));
         Buffer.add_string buf (Printf.sprintf "  sw fp, %d(sp)\n" (size - 8));
-        Buffer.add_string buf "  addi fp, sp, 0\n"
     
     | FrameTeardown size ->
         Buffer.add_string buf (Printf.sprintf "  lw ra, %d(sp)\n" (size - 4));
@@ -58,6 +57,9 @@ let emit_function (func : Regalloc.alloc_function) : string =
         Buffer.add_string buf (Printf.sprintf "  add %s, %s, %s\n"
           (reg_to_string rd) (reg_to_string rs1) (reg_to_string rs2))
     
+    |Addi (rd, rs, imm) ->
+        Buffer.add_string buf (Printf.sprintf "  addi %s, %s, %d\n"
+          (reg_to_string rd) (reg_to_string rs) imm)
     | Sub (rd, rs1, rs2) ->
         Buffer.add_string buf (Printf.sprintf "  sub %s, %s, %s\n"
           (reg_to_string rd) (reg_to_string rs1) (reg_to_string rs2))
@@ -140,7 +142,6 @@ let emit_function (func : Regalloc.alloc_function) : string =
     
     | MRet -> Buffer.add_string buf "  ret\n"
     
-    | _ -> ()
   ) func.instrs;
   
   Buffer.contents buf

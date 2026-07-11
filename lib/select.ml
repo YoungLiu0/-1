@@ -25,9 +25,12 @@ let compute_frame_layout (locals : string list) : int =
   ) locals;
   !offset
 
+(* 局部变量偏移：跳过 ra(4) + fp(4) + s0‑s11(48) = 56 字节 *)
 let get_var_offset var =
-  try -(Hashtbl.find var_offset_map var)
-  with Not_found -> failwith ("Variable not in frame: " ^ var)
+  let base = try Hashtbl.find var_offset_map var
+             with Not_found -> failwith ("Variable not in frame: " ^ var)
+  in
+  -(56 + base)
 
 let operand_to_reg = function
   | Imm _ -> failwith "Cannot convert immediate to register directly"
@@ -39,7 +42,8 @@ let operand_to_reg = function
 
 let select_function (func : ir_func) : machine_func =
   let locals_size = compute_frame_layout func.locals in
-  let frame_size = max 8 (locals_size + 8) in
+  (* 栈帧 = ra + fp + s0‑s11 + 局部变量 = 8 + 48 + locals_size = locals_size + 56 *)
+  let frame_size = max 56 (locals_size + 56) in
   let frame_aligned = ((frame_size + 15) / 16) * 16 in
 
   (* 临时寄存器计数器 *)
@@ -49,15 +53,29 @@ let select_function (func : ir_func) : machine_func =
     incr tmp_cnt;
     VReg n
   in
-  let select_instr = function
-    | Ret (Some (Imm n)) ->
-        [Li (PhysReg "a0", n); FrameTeardown frame_aligned; MRet]
 
+  (* 被调用者保存的 s0‑s11，存储在 fp 负偏移处，紧接 ra/fp 保存区 *)
+  let callee_saved = ["s0"; "s1"; "s2"; "s3"; "s4"; "s5"; "s6"; "s7"; "s8"; "s9"; "s10"; "s11"] in
+  let save_callee =
+    List.mapi (fun i reg ->
+      Sw (PhysReg reg, -(12 + i * 4), PhysReg "fp")
+    ) callee_saved
+  in
+  let restore_callee =
+    List.mapi (fun i reg ->
+      Lw (PhysReg reg, -(12 + i * 4), PhysReg "fp")
+    ) callee_saved
+  in
+
+  let select_instr = 
+    function
+    | Ret (Some (Imm n)) ->
+        [Li (PhysReg "a0", n)] @ restore_callee @ [FrameTeardown frame_aligned; MRet]
     | Ret (Some op) ->
         let reg = operand_to_reg op in
-        [Mv (PhysReg "a0", reg); FrameTeardown frame_aligned; MRet]
-
-    | Ret None -> [FrameTeardown frame_aligned; MRet]
+        [Mv (PhysReg "a0", reg)] @ restore_callee @ [FrameTeardown frame_aligned; MRet]
+    | Ret None ->
+        restore_callee @ [FrameTeardown frame_aligned; MRet]
 
     | Alloc _ -> []
 
@@ -79,7 +97,7 @@ let select_function (func : ir_func) : machine_func =
     (* 全局变量加载 *)
     | LoadGlobal (dest, var_name) ->
         let rd = operand_to_reg dest in
-        let addr =fresh_tmp () in
+        let addr = fresh_tmp () in
         [La (addr, var_name); Lw (rd, 0, addr)]
 
     (* 全局变量存储 *)
@@ -95,51 +113,63 @@ let select_function (func : ir_func) : machine_func =
 
     (* 函数调用 *)
     | Call (dest, func_name, args) ->
-      let num_args = List.length args in
-      let stack_args = if num_args > 8 then num_args -8 else 0 in
-      let stack_space = stack_args *4 in
+        let num_args = List.length args in
+        let stack_args = if num_args > 8 then num_args -8 else 0 in
+        let stack_space = stack_args *4 in
 
-      let alloc_stack =
-        if stack_args > 0 then
-          [Addi (PhysReg "sp",PhysReg "sp",-stack_space)]
-      else []
+        let alloc_stack =
+          if stack_args > 0 then
+            [Addi (PhysReg "sp",PhysReg "sp",-stack_space)]
+          else []
         in
+        (* 为保护 t0‑t6 临时寄存器，额外分配 28 字节 *)
+        let save_temps_space = 28 in
+        let alloc_save_temps = [Addi (PhysReg "sp", PhysReg "sp", -save_temps_space)] in
+        (* 保存所有临时寄存器 *)
+        let temp_regs = ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"] in
+        let save_temps = List.mapi (fun i reg ->
+            Sw (PhysReg reg, i * 4, PhysReg "sp")
+        ) temp_regs in
+        (* 寄存器参数 *)
         let reg_args = if num_args > 8 then 8 else num_args in
-        let move_reg_args =List.concat (List.init reg_args (fun i ->
-          let arg = List.nth args i in
-          let target = PhysReg (Printf.sprintf "a%d" i) in
-          match arg with
-          | Imm n ->
-              let tmp = VReg (100 + i) in
-              [Li (tmp, n); Mv (target, tmp)]
-          | _ -> [Mv (target, operand_to_reg arg)]
+        let move_reg_args = List.concat (List.init reg_args (fun i ->
+            let arg = List.nth args i in
+            let target = PhysReg (Printf.sprintf "a%d" i) in
+            match arg with
+            | Imm n ->
+                let tmp = VReg (100 + i) in
+                [Li (tmp, n); Mv (target, tmp)]
+            | _ -> [Mv (target, operand_to_reg arg)]
         )) in
-        
-        (* 将第 9 个及以后的参数压入栈 *)
+        (* 栈参数 *)
         let move_stack_args = List.concat (List.init stack_args (fun i ->
-          let arg = List.nth args (8 + i) in
-          let offset = i * 4 in
-          match arg with
-          | Imm n ->
-              let tmp = VReg (200 + i) in
-              [Li (tmp, n); Sw (tmp, offset, PhysReg "sp")]
-          | _ ->
-              [Sw (operand_to_reg arg, offset, PhysReg "sp")]
+            let arg = List.nth args (8 + i) in
+            let offset = i * 4 in
+            match arg with
+            | Imm n ->
+                let tmp = VReg (200 + i) in
+                [Li (tmp, n); Sw (tmp, offset, PhysReg "sp")]
+            | _ ->
+                [Sw (operand_to_reg arg, offset, PhysReg "sp")]
         )) in
-        
         let call_instr = [Call func_name] in
-        
+        (* 恢复临时寄存器 *)
+        let restore_temps = List.mapi (fun i reg ->
+            Lw (PhysReg reg, i * 4, PhysReg "sp")
+        ) temp_regs in
+        (* 回收保护空间 *)
+        let free_save_temps = [Addi (PhysReg "sp", PhysReg "sp", save_temps_space)] in
         (* 释放栈参数空间 *)
         let free_stack =
           if stack_args > 0 then
             [Addi (PhysReg "sp", PhysReg "sp", stack_space)]
           else []
         in
-        
         let rd = operand_to_reg dest in
         let result_move = [Mv (rd, PhysReg "a0")] in
-        
-        alloc_stack @ move_reg_args @ move_stack_args @ call_instr @ free_stack @ result_move
+        alloc_stack @ alloc_save_temps @ save_temps @ move_reg_args @
+        move_stack_args @ call_instr @ restore_temps @ free_save_temps @
+        free_stack @ result_move
 
     | Move (dest, Imm n) ->
         let rd = operand_to_reg dest in
@@ -157,8 +187,8 @@ let select_function (func : ir_func) : machine_func =
           | Imm n -> ([Li (tmp_reg, n)], tmp_reg)
           | _ -> ([], operand_to_reg operand)
         in
-        let (instrs1, r1) = load_operand op1 (fresh_tmp ()) in
         let (instrs2, r2) = load_operand op2 (fresh_tmp ()) in
+        let (instrs1, r1) = load_operand op1 (fresh_tmp ()) in
         let op_instr = match op with
           | Ast.Add -> Add (rd, r1, r2)
           | Ast.Sub -> Sub (rd, r1, r2)
@@ -211,33 +241,34 @@ let select_function (func : ir_func) : machine_func =
     | Label lbl -> [Label lbl]
   in
 
-   (* 为每个参数生成 sw 指令，把 a0‑a7 存入对应的栈槽 *)
- let save_params =
-  List.mapi (fun i param ->
-    let offset = get_var_offset param in
-    if i < 8 then
-      (* 前 8 个参数：从 a0-a7 读取 *)
-      [Sw (PhysReg (Printf.sprintf "a%d" i), offset, PhysReg "fp")]
-    else
-      (* 第 9+ 个参数：从调用者的栈帧读取 *)
-      let caller_offset = (i - 8) * 4 in
-      let tmp = fresh_tmp () in
-      [
-        (* 从调用者栈帧读取参数（相对于当前 fp 的正偏移） *)
-        Lw (tmp, caller_offset + frame_aligned, PhysReg "fp");
-        (* 保存到当前函数的栈帧 *)
-        Sw (tmp, offset, PhysReg "fp")
-      ]
-  ) func.params
-  |> List.concat
-in
-  let prologue = [FrameSetup frame_aligned] in
+  (* 保存参数：前8个通过寄存器，额外参数从调用者栈加载 *)
+  let save_params =
+    List.mapi (fun i param ->
+      let offset = get_var_offset param in
+      if i < 8 then
+        [Sw (PhysReg (Printf.sprintf "a%d" i), offset, PhysReg "fp")]
+      else
+       let stack_offset = (i - 8) * 4 in
+let tmp = fresh_tmp () in
+[ Lw (tmp, stack_offset, PhysReg "fp");   (* 正偏移 *)
+  Sw (tmp, offset, PhysReg "fp") ]
+    ) func.params
+    |> List.concat
+  in
+
+  (* prologue：分配栈帧，设置 fp 指向栈顶，保存 s 寄存器 *)
+  let prologue =
+    [FrameSetup frame_aligned;
+     Addi (PhysReg "fp", PhysReg "sp", frame_aligned)]
+    @ save_callee
+  in
+
   let body_instrs = List.concat_map select_instr func.body in
   let instrs = Label func.name :: prologue @ save_params @ body_instrs in
   { name = func.name;
     instrs = instrs;
     frame_size = frame_aligned }
 
-  let select_program (prog : ir_program) : machine_program =
+let select_program (prog : ir_program) : machine_program =
   let functions = List.map (fun f -> select_function f) prog.functions in
   { globals = prog.globals; functions }

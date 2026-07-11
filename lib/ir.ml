@@ -443,7 +443,7 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
       let (instrs1, op1) = translate_expr e1 in
       let (instrs2, op2) = translate_expr e2 in
       let dest = fresh_temp () in
-      (instrs1 @ instrs2 @ [BinOp (dest, op, op1, op2)], dest)
+      (instrs2 @ instrs1 @ [BinOp (dest, op, op1, op2)], dest)
   
   | Ast.Call (func_name, args) ->
       let arg_instrs = List.map translate_expr args in

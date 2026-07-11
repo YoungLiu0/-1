@@ -5,7 +5,7 @@ let file = ref ""
 let print_ast = ref false
 let check_types = ref false
 let emit_asm = ref false
-let enable_opt = ref false
+let enable_opt = ref true
 
 let options =
   [ ( "--print-ast"

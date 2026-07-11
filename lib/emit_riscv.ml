@@ -19,11 +19,12 @@ let string_contains (s : string) (sub : string) : bool =
 
 let emit_function (func : Regalloc.alloc_function) : string =
   let buf = Buffer.create 1024 in
-  
+  let prefix = func.name ^ "."in
+  let label name = prefix ^ name in
   List.iter (fun instr ->
     match instr with
        | Label name ->
-         Buffer.add_string buf (Printf.sprintf "%s:\n" name)
+         Buffer.add_string buf (Printf.sprintf "%s:\n" (label name))
     
     | FrameSetup size ->
         Buffer.add_string buf (Printf.sprintf "  addi sp, sp, -%d\n" size);
@@ -120,13 +121,13 @@ let emit_function (func : Regalloc.alloc_function) : string =
           (reg_to_string rd) (reg_to_string tmp))
     
     | J lbl ->
-        Buffer.add_string buf (Printf.sprintf "  j %s\n" lbl)
+        Buffer.add_string buf (Printf.sprintf "  j %s\n" (label lbl))
     
     | Beqz (rs, lbl) ->
-        Buffer.add_string buf (Printf.sprintf "  beqz %s, %s\n" (reg_to_string rs) lbl)
+        Buffer.add_string buf (Printf.sprintf "  beqz %s, %s\n" (reg_to_string rs) (label lbl))
     
     | Bnez (rs, lbl) ->
-        Buffer.add_string buf (Printf.sprintf "  bnez %s, %s\n" (reg_to_string rs) lbl)
+        Buffer.add_string buf (Printf.sprintf "  bnez %s, %s\n" (reg_to_string rs) (label lbl))
     
     (* Step 5 新增指令 *)
     | Call func_name ->

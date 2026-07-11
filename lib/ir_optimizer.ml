@@ -275,15 +275,6 @@ let optimize_cfg (cfg : Cfg.t) : Cfg.t =
 
   (** 对单个 ir_func 进行优化，返回优化后的 ir_func *)
 
-let string_of_instr = function
-  | Label s -> "Label " ^ s
-  | Jump s -> "Jump " ^ s
-  | BranchZero (_, s) -> "BranchZero -> " ^ s
-  | BranchNonZero (_, s) -> "BranchNonZero -> " ^ s
-  | Ret _ -> "Ret"
-  | Move (_, _) -> "Move"
-  | BinOp (_, op, _, _) -> "BinOp " ^ (match op with Ast.Add -> "+" | _ -> "?")
-  | _ -> "OtherInstr";;
 (* 简要描述指令，用于调试 *)
 let string_of_instr = function
   | Ir.Label s -> "Label " ^ s
@@ -294,7 +285,7 @@ let string_of_instr = function
   | Ir.Ret None -> "Ret(None)"
   | Ir.Move (_, _) -> "Move"
   | Ir.BinOp (_, op, _, _) -> "BinOp " ^ (match op with Ast.Add -> "+" | Ast.Sub -> "-" | _ -> "?")
-  | Ir.UnaryOp (_, op, _) -> "UnaryOp"
+  | Ir.UnaryOp (_, _op, _) -> "UnaryOp"
   | Ir.Store (_, _) -> "Store"
   | Ir.Load (_, _) -> "Load"
   | Ir.Alloc _ -> "Alloc"

@@ -53,7 +53,32 @@ type ir_global = {
 }
 let unique_var_counter = ref 0
 
+let global_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
 
+let rec eval_const_expr = function
+ | Ast.IntLit n -> Some n
+  | Ast.Var name -> (try Some (Hashtbl.find global_const_table name) with Not_found -> None)
+  | Ast.Unary (Neg, e) -> Option.map (fun x -> -x) (eval_const_expr e)
+  | Ast.Unary (Pos, e) -> eval_const_expr e
+  | Ast.Binary (Add, e1, e2) ->
+      (match eval_const_expr e1, eval_const_expr e2 with Some x, Some y -> Some (x + y) | _ -> None)
+   | Ast.Binary (Sub, e1, e2) ->
+      (match eval_const_expr e1, eval_const_expr e2 with
+       | Some n1, Some n2 -> Some (n1 - n2)
+       | _ -> None)
+  | Ast.Binary (Mul, e1, e2) ->
+      (match eval_const_expr e1, eval_const_expr e2 with
+       | Some n1, Some n2 -> Some (n1 * n2)
+       | _ -> None)
+  | Ast.Binary (Div, e1, e2) ->
+      (match eval_const_expr e1, eval_const_expr e2 with
+       | Some n1, Some n2 when n2 <> 0 -> Some (n1 / n2)
+       | _ -> None)
+  | Ast.Binary (Mod, e1, e2) ->
+      (match eval_const_expr e1, eval_const_expr e2 with
+       | Some n1, Some n2 when n2 <> 0 -> Some (n1 mod n2)
+       | _ -> None)
+  | _ -> None   (* 其他情况（Lt, Le, Gt, Ge, Eq, Ne, And, Or 等）视为非常量，按规范报错 *)
 let global_vars : ir_global list ref = ref []
 let add_global_var name is_const value =
   global_vars := { g_name = name; g_is_const = is_const; g_init = value } :: !global_vars
@@ -97,7 +122,7 @@ let get_ir_name name=
 match lookup_symbol name with
 |Some info -> info.ir_name
 |None -> failwith("Undefined Variable"^name)
-let reset_globals () = global_vars := []
+let reset_globals () = global_vars := []; Hashtbl.clear global_const_table
 
 (* ---- IR 函数 ---- *)
 type ir_func = {
@@ -173,11 +198,11 @@ let rec translate_program (prog : Ast.program) : ir_program =
         in
         add_global_var name false init_val
     | Ast.GlobalConstDecl (name, init_expr) ->
-        let init_val = match init_expr with
-          | Ast.IntLit n -> Some n
-          | _ -> None
-        in
-        add_global_var name true init_val
+        let init_val = eval_const_expr init_expr in
+         (match init_val with
+         | Some v -> Hashtbl.add global_const_table name v
+        | None -> failwith ("Global constant '" ^ name ^ "' must be a compile-time constant"));
+          add_global_var name true init_val
     | _ -> ()
   in
   List.iter collect_global prog;
@@ -256,16 +281,20 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
       add_local_var ir_name;
       init_instrs @ [Alloc ir_name; Store (ir_name, init_val)]
   
-  | Ast.ConstDecl (name, init_expr) ->
-      let (init_instrs, init_val) = translate_expr init_expr in
-      let const_value = match init_val with Imm n -> Some n | _ -> None in
-      (match lookup_current_scope name with
-       | Some _ -> failwith ("Constant " ^ name ^ " already declared")
-       | None -> ());
-      add_symbol name true const_value false;
-      let ir_name = get_ir_name name in
-      add_local_var ir_name;
-      init_instrs @ [Alloc ir_name; Store (ir_name, init_val)]
+ | Ast.ConstDecl (name, init_expr) ->
+    let const_value = eval_const_expr init_expr in
+    (match const_value with
+     | Some _ -> ()
+     | None -> failwith ("Local constant '" ^ name ^ "' must have a compile-time value"));
+    (match lookup_current_scope name with
+     | Some _ -> failwith ("Constant " ^ name ^ " already declared")
+     | None -> ());
+    add_symbol name true const_value false;
+    let ir_name = get_ir_name name in
+    add_local_var ir_name;
+    (* 编译期常量不需要运行时初始化代码，直接折叠即可；但为了保持 IR 一致性，可保留原有的 Alloc/Store 或直接返回空列表 *)
+    (* 这里直接返回空列表，因为后续引用会直接使用立即数 *)
+    []
   
   | Ast.Assign (name, expr) ->
       (match lookup_symbol name with
@@ -354,8 +383,11 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
   | Ast.Var name ->
       (match lookup_symbol name with
        | None -> failwith ("Undefined variable: " ^ name)
-       | Some info when info.is_const && info.value <> None ->
-           ([], Imm (Option.get info.value))
+      | Some info when info.is_const ->
+         (* 从编译期常量表取值，折叠为立即数 *)
+        (match info.value with
+          | Some n -> ([], Imm n)
+          | None -> failwith ("Constant '" ^ name ^ "' has no compile-time value"))
        | Some info when info.is_global ->
            let dest = fresh_temp () in
            ([LoadGlobal (dest, name)], dest)

@@ -1,0 +1,20 @@
+int main() {
+    int a = 1;
+    int b = 2;
+    int c = 3;
+    
+    if (a < b) {
+        if (b < c) {
+            while (a < 5) {
+                a = a + 1;
+                if (a == 3) {
+                    b = b + 1;
+                    continue;
+                }
+                c = c + 1;
+            }
+        }
+    }
+    
+    return a + b + c;
+}

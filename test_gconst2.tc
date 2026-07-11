@@ -1,0 +1,8 @@
+const int x = 10;
+const int y = x * 2 + 5;
+const int z = (y - x) / 5;
+const int result = z * z + x;
+
+int main() {
+    return result;
+}

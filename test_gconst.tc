@@ -1,0 +1,8 @@
+const int a = 5;
+const int b = a + 3;
+const int c = b * 2;
+const int d = c - a;
+
+int main() {
+    return d;
+}

@@ -6,21 +6,14 @@ main:
   sw fp, 24(sp)
   addi fp, sp, 0
 main..L0:
-  li t0, 1
+  li t0, 10
   sw t0, -4(fp)
-  li t1, 2
+  li t1, 20
   sw t1, -8(fp)
-  li t2, 3
+  li t2, 30
   sw t2, -12(fp)
-  li t3, 4
-  sw t3, -16(fp)
-  li t4, 5
-  sw t4, -4(fp)
-  li t5, 6
-  sw t5, -8(fp)
-  li t6, 7
-  sw t6, -12(fp)
-  li a0, 42
+  lw t3, -8(fp)
+  mv a0, t3
   lw ra, 28(sp)
   lw fp, 24(sp)
   addi sp, sp, 32

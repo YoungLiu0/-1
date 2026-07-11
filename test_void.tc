@@ -1,0 +1,16 @@
+int g = 0;
+
+void increment() {
+    g = g + 1;
+    if (g > 5) {
+        return;
+    }
+    g = g + 1;
+}
+
+int main() {
+    increment();
+    increment();
+    increment();
+    return g;
+}

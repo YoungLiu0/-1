@@ -1,0 +1,12 @@
+int main() {
+    int x = 5;
+    int y = x + 1;
+    {
+        int x = y + 1;  // x=7
+        int y = x + 1;  // y=8
+        {
+            int x = y + 1;  // x=9
+            return x;
+        }
+    }
+}

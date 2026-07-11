@@ -1,0 +1,12 @@
+int foo(int a, int b, int c, int d, int e, int f,
+        int g, int h, int i, int j) {
+    return a + b + c + d + e + f + g + h + i + j;
+}
+
+int bar(int x) {
+    return foo(x, x+1, x+2, x+3, x+4, x+5, x+6, x+7, x+8, x+9);
+}
+
+int main() {
+    return bar(1);
+}

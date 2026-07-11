@@ -1,0 +1,19 @@
+int x = 10;
+
+int foo() {
+    int x = 20;
+    {
+        int x = 30;
+        return x;
+    }
+}
+
+int bar() {
+    return x;
+}
+
+int main() {
+    int a = foo();
+    int b = bar();
+    return a + b;
+}

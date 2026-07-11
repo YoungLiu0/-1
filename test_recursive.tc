@@ -1,0 +1,14 @@
+int count = 0;
+
+int factorial(int n) {
+    count = count + 1;
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int main() {
+    int result = factorial(5);
+    return count;  // 应该调用了 5 次
+}

@@ -1,0 +1,19 @@
+int x = 0;
+
+void foo(int n) {
+    if (n < 0) {
+        return;
+    }
+    x = x + n;
+    if (n > 10) {
+        return;
+    }
+    x = x + 1;
+}
+
+int main() {
+    foo(-5);
+    foo(5);
+    foo(15);
+    return x;
+}

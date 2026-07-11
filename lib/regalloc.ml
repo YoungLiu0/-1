@@ -10,8 +10,7 @@ type alloc_function = {
 (** 可用的物理寄存器池 *)
 let temp_regs = ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"]
 let saved_regs = ["s1"; "s2"; "s3"; "s4"; "s5"; "s6"; "s7"; "s8"; "s9"; "s10"; "s11"]
-let available_regs = temp_regs @ saved_regs  (* 19个寄存器 *)
-
+let available_regs = saved_regs @ temp_regs  (* s寄存器优先 *)
 (** 全局映射表 *)
 let reg_map : (int, string) Hashtbl.t = Hashtbl.create 128
 let spill_slots : (int, int) Hashtbl.t = Hashtbl.create 128

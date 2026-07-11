@@ -112,65 +112,38 @@ let select_function (func : ir_func) : machine_func =
         load_instrs @ [La (addr, var_name); Sw (rs, 0, addr)]
 
     (* 函数调用 *)
-    | Call (dest, func_name, args) ->
-        let num_args = List.length args in
-        let stack_args = if num_args > 8 then num_args -8 else 0 in
-        let stack_space = stack_args *4 in
-
-        let alloc_stack =
-          if stack_args > 0 then
-            [Addi (PhysReg "sp",PhysReg "sp",-stack_space)]
-          else []
-        in
-        (* 为保护 t0‑t6 临时寄存器，额外分配 28 字节 *)
-        let save_temps_space = 28 in
-        let alloc_save_temps = [Addi (PhysReg "sp", PhysReg "sp", -save_temps_space)] in
-        (* 保存所有临时寄存器 *)
-        let temp_regs = ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"] in
-        let save_temps = List.mapi (fun i reg ->
-            Sw (PhysReg reg, i * 4, PhysReg "sp")
-        ) temp_regs in
-        (* 寄存器参数 *)
-        let reg_args = if num_args > 8 then 8 else num_args in
-        let move_reg_args = List.concat (List.init reg_args (fun i ->
-            let arg = List.nth args i in
-            let target = PhysReg (Printf.sprintf "a%d" i) in
-            match arg with
-            | Imm n ->
-                let tmp = VReg (100 + i) in
-                [Li (tmp, n); Mv (target, tmp)]
-            | _ -> [Mv (target, operand_to_reg arg)]
-        )) in
-        (* 栈参数 *)
-        let move_stack_args = List.concat (List.init stack_args (fun i ->
-            let arg = List.nth args (8 + i) in
-            let offset = i * 4 in
-            match arg with
-            | Imm n ->
-                let tmp = VReg (200 + i) in
-                [Li (tmp, n); Sw (tmp, offset, PhysReg "sp")]
-            | _ ->
-                [Sw (operand_to_reg arg, offset, PhysReg "sp")]
-        )) in
-        let call_instr = [Call func_name] in
-        (* 恢复临时寄存器 *)
-        let restore_temps = List.mapi (fun i reg ->
-            Lw (PhysReg reg, i * 4, PhysReg "sp")
-        ) temp_regs in
-        (* 回收保护空间 *)
-        let free_save_temps = [Addi (PhysReg "sp", PhysReg "sp", save_temps_space)] in
-        (* 释放栈参数空间 *)
-        let free_stack =
-          if stack_args > 0 then
-            [Addi (PhysReg "sp", PhysReg "sp", stack_space)]
-          else []
-        in
-        let rd = operand_to_reg dest in
-        let result_move = [Mv (rd, PhysReg "a0")] in
-        alloc_stack @ alloc_save_temps @ save_temps @ move_reg_args @
-        move_stack_args @ call_instr @ restore_temps @ free_save_temps @
-        free_stack @ result_move
-
+  | Call (dest, func_name, args) ->
+    let num_args = List.length args in
+    let stack_args = if num_args > 8 then num_args - 8 else 0 in
+    let stack_space = stack_args * 4 in
+    let aligned = ((stack_space + 15) / 16) * 16 in   (* 对齐到 16 *)
+    let alloc = if aligned > 0 then [Addi (PhysReg "sp", PhysReg "sp", -aligned)] else [] in
+    let reg_args = min num_args 8 in
+    let move_reg_args = List.concat (List.init reg_args (fun i ->
+        let arg = List.nth args i in
+        let target = PhysReg (Printf.sprintf "a%d" i) in
+        match arg with
+        | Imm n ->
+            let tmp = VReg (100 + i) in
+            [Li (tmp, n); Mv (target, tmp)]
+        | _ -> [Mv (target, operand_to_reg arg)]
+    )) in
+    let move_stack_args = List.concat (List.init stack_args (fun i ->
+        let arg = List.nth args (8 + i) in
+        let offset = i * 4 in   (* 现在从 0 开始 *)
+        match arg with
+        | Imm n ->
+            let tmp = VReg (200 + i) in
+            [Li (tmp, n); Sw (tmp, offset, PhysReg "sp")]
+        | _ ->
+            [Sw (operand_to_reg arg, offset, PhysReg "sp")]
+    )) in
+    let call_instr = [Call func_name] in
+    let free = if aligned > 0 then [Addi (PhysReg "sp", PhysReg "sp", aligned)] else [] in
+    let rd = operand_to_reg dest in
+    let result_move = [Mv (rd, PhysReg "a0")] in
+    alloc @ move_reg_args @ move_stack_args @ call_instr @ free @ result_move
+    
     | Move (dest, Imm n) ->
         let rd = operand_to_reg dest in
         [Li (rd, n)]

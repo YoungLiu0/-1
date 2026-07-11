@@ -1,52 +1,10 @@
   .text
-  .globl mul
-mul:
-  addi sp, sp, -64
-  sw ra, 60(sp)
-  sw fp, 56(sp)
-  addi fp, sp, 64
-  sw s0, -12(fp)
-  sw s1, -16(fp)
-  sw s2, -20(fp)
-  sw s3, -24(fp)
-  sw s4, -28(fp)
-  sw s5, -32(fp)
-  sw s6, -36(fp)
-  sw s7, -40(fp)
-  sw s8, -44(fp)
-  sw s9, -48(fp)
-  sw s10, -52(fp)
-  sw s11, -56(fp)
-  sw a0, -60(fp)
-  sw a1, -64(fp)
-mul..L0:
-  lw t0, -64(fp)
-  lw t1, -60(fp)
-  mul t2, t1, t0
-  mv a0, t2
-  lw s0, -12(fp)
-  lw s1, -16(fp)
-  lw s2, -20(fp)
-  lw s3, -24(fp)
-  lw s4, -28(fp)
-  lw s5, -32(fp)
-  lw s6, -36(fp)
-  lw s7, -40(fp)
-  lw s8, -44(fp)
-  lw s9, -48(fp)
-  lw s10, -52(fp)
-  lw s11, -56(fp)
-  lw ra, 60(sp)
-  lw fp, 56(sp)
-  addi sp, sp, 64
-  ret
-
-  .globl compute
-compute:
-  addi sp, sp, -112
-  sw ra, 108(sp)
-  sw fp, 104(sp)
-  addi fp, sp, 112
+  .globl sum
+sum:
+  addi sp, sp, -144
+  sw ra, 140(sp)
+  sw fp, 136(sp)
+  addi fp, sp, 144
   sw s0, -12(fp)
   sw s1, -16(fp)
   sw s2, -20(fp)
@@ -67,55 +25,70 @@ compute:
   sw a5, -80(fp)
   sw a6, -84(fp)
   sw a7, -88(fp)
-  lw t0, 0(fp)
-  sw t0, -92(fp)
-  lw t0, 4(fp)
-  sw t0, -96(fp)
-compute..L1:
-  lw t0, -96(fp)
-  lw t1, -92(fp)
-  lw t2, -88(fp)
-  lw t3, -84(fp)
-  lw t4, -80(fp)
-  lw t5, -76(fp)
-  lw t6, -72(fp)
-  lw s1, -68(fp)
+  lw s1, 0(fp)
+  sw s1, -92(fp)
+  lw s1, 4(fp)
+  sw s1, -96(fp)
+  lw s1, 8(fp)
+  sw s1, -100(fp)
+  lw s1, 12(fp)
+  sw s1, -104(fp)
+  lw s1, 16(fp)
+  sw s1, -108(fp)
+  lw s1, 20(fp)
+  sw s1, -112(fp)
+  lw s1, 24(fp)
+  sw s1, -116(fp)
+  lw s1, 28(fp)
+  sw s1, -120(fp)
+  lw s1, 32(fp)
+  sw s1, -124(fp)
+  lw s1, 36(fp)
+  sw s1, -128(fp)
+  lw s1, 40(fp)
+  sw s1, -132(fp)
+  lw s1, 44(fp)
+  sw s1, -136(fp)
+  lw s1, -60(fp)
   lw s2, -64(fp)
-  lw s3, -60(fp)
-  add s4, s3, s2
-  add s2, s4, s1
-  add s1, s2, t6
-  add t6, s1, t5
-  add t5, t6, t4
-  add t4, t5, t3
-  add t3, t4, t2
-  add t2, t3, t1
-  add t1, t2, t0
-  sw t1, -100(fp)
-  lw t0, -100(fp)
-  li t1, 100
-  slt t2, t1, t0
-  beqz t2, compute.if_end_2
-compute.then_0:
-  lw t0, -100(fp)
-  li t1, 50
-  sub t2, t0, t1
-  sw t2, -100(fp)
-compute.if_end_2:
-compute.while_start_3:
-  lw t0, -100(fp)
-  li t1, 10
-  slt t2, t1, t0
-  beqz t2, compute.while_end_5
-compute.while_body_4:
-  lw t0, -100(fp)
-  li t1, 2
-  div t2, t0, t1
-  sw t2, -100(fp)
-  j compute.while_start_3
-compute.while_end_5:
-  lw t0, -100(fp)
-  mv a0, t0
+  add s3, s1, s2
+  lw s1, -68(fp)
+  add s2, s3, s1
+  lw s1, -72(fp)
+  add s3, s2, s1
+  lw s1, -76(fp)
+  add s2, s3, s1
+  lw s1, -80(fp)
+  add s3, s2, s1
+  lw s1, -84(fp)
+  add s2, s3, s1
+  lw s1, -88(fp)
+  add s3, s2, s1
+  lw s1, -92(fp)
+  add s2, s3, s1
+  lw s1, -96(fp)
+  add s3, s2, s1
+  lw s1, -100(fp)
+  add s2, s3, s1
+  lw s1, -104(fp)
+  add s3, s2, s1
+  lw s1, -108(fp)
+  add s2, s3, s1
+  lw s1, -112(fp)
+  add s3, s2, s1
+  lw s1, -116(fp)
+  add s2, s3, s1
+  lw s1, -120(fp)
+  add s3, s2, s1
+  lw s1, -124(fp)
+  add s2, s3, s1
+  lw s1, -128(fp)
+  add s3, s2, s1
+  lw s1, -132(fp)
+  add s2, s3, s1
+  lw s1, -136(fp)
+  add s3, s2, s1
+  mv a0, s3
   lw s0, -12(fp)
   lw s1, -16(fp)
   lw s2, -20(fp)
@@ -128,17 +101,17 @@ compute.while_end_5:
   lw s9, -48(fp)
   lw s10, -52(fp)
   lw s11, -56(fp)
-  lw ra, 108(sp)
-  lw fp, 104(sp)
-  addi sp, sp, 112
+  lw ra, 140(sp)
+  lw fp, 136(sp)
+  addi sp, sp, 144
   ret
 
   .globl main
 main:
-  addi sp, sp, -80
-  sw ra, 76(sp)
-  sw fp, 72(sp)
-  addi fp, sp, 80
+  addi sp, sp, -64
+  sw ra, 60(sp)
+  sw fp, 56(sp)
+  addi fp, sp, 64
   sw s0, -12(fp)
   sw s1, -16(fp)
   sw s2, -20(fp)
@@ -151,77 +124,51 @@ main:
   sw s9, -48(fp)
   sw s10, -52(fp)
   sw s11, -56(fp)
-main..L2:
-  addi sp, sp, -28
-  sw t0, 0(sp)
-  sw t1, 4(sp)
-  sw t2, 8(sp)
-  sw t3, 12(sp)
-  sw t4, 16(sp)
-  sw t5, 20(sp)
-  sw t6, 24(sp)
-  li t0, 3
-  mv a0, t0
-  li t1, 4
-  mv a1, t1
-  call mul
-  lw t0, 0(sp)
-  lw t1, 4(sp)
-  lw t2, 8(sp)
-  lw t3, 12(sp)
-  lw t4, 16(sp)
-  lw t5, 20(sp)
-  lw t6, 24(sp)
-  addi sp, sp, 28
-  mv t2, a0
-  sw t2, -60(fp)
-  addi sp, sp, -8
-  addi sp, sp, -28
-  sw t0, 0(sp)
-  sw t1, 4(sp)
-  sw t2, 8(sp)
-  sw t3, 12(sp)
-  sw t4, 16(sp)
-  sw t5, 20(sp)
-  sw t6, 24(sp)
-  li t0, 1
-  mv a0, t0
-  li t1, 2
-  mv a1, t1
-  li t0, 3
-  mv a2, t0
-  li t0, 4
-  mv a3, t0
-  li t0, 5
-  mv a4, t0
-  li t0, 6
-  mv a5, t0
-  li t0, 7
-  mv a6, t0
-  li t0, 8
-  mv a7, t0
-  li t0, 9
-  sw t0, 0(sp)
-  li t0, 10
-  sw t0, 4(sp)
-  call compute
-  lw t0, 0(sp)
-  lw t1, 4(sp)
-  lw t2, 8(sp)
-  lw t3, 12(sp)
-  lw t4, 16(sp)
-  lw t5, 20(sp)
-  lw t6, 24(sp)
-  addi sp, sp, 28
-  addi sp, sp, 8
-  mv t0, a0
-  sw t0, -64(fp)
-  lw t0, -64(fp)
-  lw t1, -60(fp)
-  add t2, t1, t0
-  sw t2, -68(fp)
-  lw t0, -68(fp)
-  mv a0, t0
+  addi sp, sp, -48
+  li s1, 1
+  mv a0, s1
+  li s1, 2
+  mv a1, s1
+  li s1, 3
+  mv a2, s1
+  li s1, 4
+  mv a3, s1
+  li s1, 5
+  mv a4, s1
+  li s1, 6
+  mv a5, s1
+  li s1, 7
+  mv a6, s1
+  li s1, 8
+  mv a7, s1
+  li s1, 9
+  sw s1, 0(sp)
+  li s1, 10
+  sw s1, 4(sp)
+  li s1, 11
+  sw s1, 8(sp)
+  li s1, 12
+  sw s1, 12(sp)
+  li s1, 13
+  sw s1, 16(sp)
+  li s1, 14
+  sw s1, 20(sp)
+  li s1, 15
+  sw s1, 24(sp)
+  li s1, 16
+  sw s1, 28(sp)
+  li s1, 17
+  sw s1, 32(sp)
+  li s1, 18
+  sw s1, 36(sp)
+  li s1, 19
+  sw s1, 40(sp)
+  li s1, 20
+  sw s1, 44(sp)
+  call sum
+  addi sp, sp, 48
+  mv s1, a0
+  mv a0, s1
   lw s0, -12(fp)
   lw s1, -16(fp)
   lw s2, -20(fp)
@@ -234,7 +181,7 @@ main..L2:
   lw s9, -48(fp)
   lw s10, -52(fp)
   lw s11, -56(fp)
-  lw ra, 76(sp)
-  lw fp, 72(sp)
-  addi sp, sp, 80
+  lw ra, 60(sp)
+  lw fp, 56(sp)
+  addi sp, sp, 64
   ret

@@ -94,7 +94,7 @@ let enter_scope () =
 
 let lookup_symbol name =
   let rec search = function
-    | [] -> None
+    | [] -> StringMap.find_opt name !global_symbol_table   (* 找不到则查全局表 *)
     | scope :: rest ->
         match StringMap.find_opt name scope with
         | Some info -> Some info
@@ -390,30 +390,20 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
   match e with
   | Ast.IntLit n -> ([], Imm n)
   
-| Ast.Var name ->
-    (match lookup_symbol name with
-     | Some info when info.is_const ->
-         (match info.value with
-          | Some n -> ([], Imm n)
-          | None -> failwith ("Constant '" ^ name ^ "' has no compile-time value"))
-     | Some info when info.is_global ->
-         let dest = fresh_temp () in
-         ([LoadGlobal (dest, name)], dest)
-     | Some info ->
-         let ir_name = info.ir_name in
-         let dest = fresh_temp () in
-         ([Load (dest, ir_name)], dest)
-     | None ->
-         (* 局部未找到，尝试全局符号表 *)
-         match StringMap.find_opt name !global_symbol_table with
-         | Some info when info.is_const ->
-             (match info.value with
-              | Some n -> ([], Imm n)
-              | None -> failwith ("Global constant '" ^ name ^ "' has no compile-time value"))
-         | Some info ->
-             let dest = fresh_temp () in
-             ([LoadGlobal (dest, name)], dest)
-         | None -> failwith ("Undefined variable: " ^ name))
+  | Ast.Var name ->
+      (match lookup_symbol name with
+       | None -> failwith ("Undefined variable: " ^ name)
+       | Some info when info.is_const ->
+          (match info.value with
+           | Some n -> ([], Imm n)
+           | None -> failwith ("Constant '" ^ name ^ "' has no compile-time value"))
+       | Some info when info.is_global ->
+           let dest = fresh_temp () in
+           ([LoadGlobal (dest, name)], dest)
+       | Some info ->
+           let ir_name = info.ir_name in
+           let dest = fresh_temp () in
+           ([Load (dest, ir_name)], dest))
   | Ast.Unary (op, e1) ->
       let (instrs1, op1) = translate_expr e1 in
       let dest = fresh_temp () in

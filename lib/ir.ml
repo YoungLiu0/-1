@@ -54,6 +54,7 @@ type ir_global = {
 let unique_var_counter = ref 0
 
 let global_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
+let global_symbol_table : var_info StringMap.t ref = ref StringMap.empty  (* 新增 *)
 let local_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
 let rec eval_const_expr = function
  | Ast.IntLit n -> Some n
@@ -91,9 +92,9 @@ let enter_scope () =
   symbol_stack := List.tl !symbol_stack
 
 
-  let lookup_symbol name =
+ let lookup_symbol name =
   let rec search = function
-    | [] -> None
+    | [] -> StringMap.find_opt name !global_symbol_table   (* 修改这里 *)
     | scope :: rest ->
         match StringMap.find_opt name scope with
         | Some info -> Some info
@@ -111,7 +112,7 @@ let add_symbol name is_const value is_global =
   | [] -> failwith "No scope to add symbol"
   | current :: rest ->
     let ir_name = 
-      if lookup_symbol name <> None then
+      if lookup_current_scope  name <> None then
         let new_name = name ^"_"^string_of_int !unique_var_counter in
     incr unique_var_counter;
     new_name
@@ -193,20 +194,24 @@ let rec translate_program (prog : Ast.program) : ir_program =
   reset_globals ();
   
   (* 第一遍：收集所有全局变量 *)
-  let collect_global = function
-    | Ast.GlobalVarDecl (name, init_expr) ->
-        let init_val = match init_expr with
-          | Ast.IntLit n -> Some n
-          | _ -> None
-        in
-        add_global_var name false init_val
-    | Ast.GlobalConstDecl (name, init_expr) ->
-        let init_val = eval_const_expr init_expr in
-         (match init_val with
-         | Some v -> Hashtbl.add global_const_table name v
-        | None -> failwith ("Global constant '" ^ name ^ "' must be a compile-time constant"));
-          add_global_var name true init_val
-    | _ -> ()
+ let collect_global = function
+  | Ast.GlobalVarDecl (name, init_expr) ->
+      let init_val = match init_expr with
+        | Ast.IntLit n -> Some n
+        | _ -> None
+      in
+      add_global_var name false init_val;
+      let info = { name; is_const=false; value=init_val; is_global=true; ir_name=name } in
+      global_symbol_table := StringMap.add name info !global_symbol_table
+  | Ast.GlobalConstDecl (name, init_expr) ->
+      let init_val = eval_const_expr init_expr in
+      (match init_val with
+       | Some v -> Hashtbl.add global_const_table name v
+       | None -> failwith ("Global constant '" ^ name ^ "' must be a compile-time constant"));
+      add_global_var name true init_val;
+      let info = { name; is_const=true; value=init_val; is_global=true; ir_name=name } in
+      global_symbol_table := StringMap.add name info !global_symbol_table
+  | _ -> ()
   in
   List.iter collect_global prog;
   
@@ -231,13 +236,14 @@ and translate_func (f : Ast.func_def) : ir_func =
   Hashtbl.clear local_const_table;   (* ← 新增这一行 *)
   enter_scope ();      (* 函数级作用域 *)
   (* 将全局变量加入符号表（所有函数都能看到全局变量） *)
-  List.iter (fun g ->
+  (* List.iter (fun g ->
     add_symbol g.g_name g.g_is_const g.g_init true
-  ) (List.rev !global_vars);
+  ) (List.rev !global_vars); *)
   (* 将参数加入符号表，参数视为局部变量，需要栈空间 *)
   List.iter (fun param -> 
     add_symbol param false None false;
-    add_local_var param
+   let ir_name = get_ir_name param in
+    add_local_var ir_name
   ) f.f_params;
   
   let body_instrs = translate_stmt f.f_body in

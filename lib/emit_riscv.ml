@@ -22,7 +22,8 @@ let emit_function (func : Regalloc.alloc_function) : string =
   
   List.iter (fun instr ->
     match instr with
-    | Label name -> Buffer.add_string buf (name ^ ":\n")
+       | Label name ->
+        Buffer.add_string buf (Printf.sprintf "  .globl %s\n%s:\n" name name)
     
     | FrameSetup size ->
         Buffer.add_string buf (Printf.sprintf "  addi sp, sp, -%d\n" size);
@@ -157,8 +158,8 @@ let emit_program (globals : Ir.ir_global list) (funcs : Regalloc.alloc_function 
     else
       ""
   in
-  let text_section =
-    "  .text\n  .globl main\n" ^
+   let text_section =
+    "  .text\n" ^
     String.concat "" (List.map emit_function funcs)
   in
    let asm = data_section ^ text_section in

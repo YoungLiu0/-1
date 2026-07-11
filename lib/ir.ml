@@ -250,10 +250,10 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
       (match lookup_current_scope name with
        | Some _ -> failwith ("Variable " ^ name ^ " already declared")
        | None -> ());
+       let (init_instrs, init_val) = translate_expr init_expr in
       add_symbol name false None false;
       let ir_name = get_ir_name name in
       add_local_var ir_name;
-      let (init_instrs, init_val) = translate_expr init_expr in
       init_instrs @ [Alloc ir_name; Store (ir_name, init_val)]
   
   | Ast.ConstDecl (name, init_expr) ->

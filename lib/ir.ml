@@ -35,6 +35,7 @@ type var_info = {
   is_const: bool;
   value: int option;   (* 常量的值 *)
   is_global: bool;     (* 是否为全局变量 *)
+  ir_name:string;
 }
 
 module StringMap = Map.Make(String)
@@ -50,6 +51,9 @@ type ir_global = {
   g_is_const: bool;
   g_init    : int option;    (* 初始值 *)
 }
+let unique_var_counter = ref 0
+
+
 let global_vars : ir_global list ref = ref []
 let add_global_var name is_const value =
   global_vars := { g_name = name; g_is_const = is_const; g_init = value } :: !global_vars
@@ -58,14 +62,8 @@ let enter_scope () =
   let exit_scope () =
   symbol_stack := List.tl !symbol_stack
 
-let add_symbol name is_const value is_global =
-  match !symbol_stack with
-  | [] -> failwith "No scope to add symbol"
-  | current :: rest ->
-      let info = { name; is_const; value; is_global } in
-      symbol_stack := StringMap.add name info current :: rest
 
-let lookup_symbol name =
+  let lookup_symbol name =
   let rec search = function
     | [] -> None
     | scope :: rest ->
@@ -79,6 +77,26 @@ let lookup_current_scope name=
   match !symbol_stack with
   |[]->None
   |current::_->StringMap.find_opt name current
+
+let add_symbol name is_const value is_global =
+  match !symbol_stack with
+  | [] -> failwith "No scope to add symbol"
+  | current :: rest ->
+    let ir_name = 
+      if lookup_symbol name <> None then
+        let new_name = name ^"_"^string_of_int !unique_var_counter in
+    incr unique_var_counter;
+    new_name
+      else name in
+      let info = { name; is_const; value; is_global ;ir_name} in
+      symbol_stack := StringMap.add name info current :: rest
+
+
+
+let get_ir_name name=
+match lookup_symbol name with
+|Some info -> info.ir_name
+|None -> failwith("Undefined Variable"^name)
 let reset_globals () = global_vars := []
 
 (* ---- IR 函数 ---- *)
@@ -233,9 +251,10 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
        | Some _ -> failwith ("Variable " ^ name ^ " already declared")
        | None -> ());
       add_symbol name false None false;
-      add_local_var name;
+      let ir_name = get_ir_name name in
+      add_local_var ir_name;
       let (init_instrs, init_val) = translate_expr init_expr in
-      init_instrs @ [Alloc name; Store (name, init_val)]
+      init_instrs @ [Alloc ir_name; Store (ir_name, init_val)]
   
   | Ast.ConstDecl (name, init_expr) ->
       let (init_instrs, init_val) = translate_expr init_expr in
@@ -244,8 +263,9 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
        | Some _ -> failwith ("Constant " ^ name ^ " already declared")
        | None -> ());
       add_symbol name true const_value false;
-      add_local_var name;
-      init_instrs @ [Alloc name; Store (name, init_val)]
+      let ir_name = get_ir_name name in
+      add_local_var ir_name;
+      init_instrs @ [Alloc ir_name; Store (ir_name, init_val)]
   
   | Ast.Assign (name, expr) ->
       (match lookup_symbol name with
@@ -256,10 +276,11 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
            (* 全局变量赋值 *)
            let (expr_instrs, expr_val) = translate_expr expr in
            expr_instrs @ [StoreGlobal (name, expr_val)]
-       | Some _ ->
+       | Some info->
            (* 局部变量赋值 *)
+           let ir_name = info.ir_name in
            let (expr_instrs, expr_val) = translate_expr expr in
-           expr_instrs @ [Store (name, expr_val)])
+           expr_instrs @ [Store (ir_name, expr_val)])
   
   | Ast.ExprStmt e ->
       let (instrs, _) = translate_expr e in
@@ -338,9 +359,10 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
        | Some info when info.is_global ->
            let dest = fresh_temp () in
            ([LoadGlobal (dest, name)], dest)
-       | Some _ ->
+       | Some info->
+        let ir_name = info.ir_name in
            let dest = fresh_temp () in
-           ([Load (dest, name)], dest))
+           ([Load (dest, ir_name)], dest))
   
   | Ast.Unary (op, e1) ->
       let (instrs1, op1) = translate_expr e1 in

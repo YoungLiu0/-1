@@ -13,7 +13,7 @@ open Cfg
 let has_side_effect = function
   | Ret _ | Call _ | StoreGlobal _ | Jump _ 
   | BranchZero _ | BranchNonZero _ | Label _ -> true
-  | Store _ -> false  (* 保守处理：认为所有 Store 都有副作用 *)
+  | Store _ -> true  (* 保守处理：认为所有 Store 都有副作用 *)
   | _ -> false
 
 (** 从操作数获取立即数值 *)
@@ -119,22 +119,14 @@ let constant_folding (instrs : ir_instr list) : ir_instr list =
 
 (** 局部常量传播：将已知的常量临时变量替换为立即数 *)
 let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
-  let const_map : (operand, int) Hashtbl.t = Hashtbl.create 16 in
+  let const_map = Hashtbl.create 16 in
   List.map (fun instr ->
     match instr with
-    | Move (dest, src) ->
-        (* 尝试从 src 获取常量值，无论是 Imm 还是已知常量的 Temp/Local *)
-        let value = match src with
-          | Imm n -> Some n
-          | _ -> Hashtbl.find_opt const_map src
-        in
-        (match value with
-         | Some n ->
-             Hashtbl.replace const_map dest n;
-             Move (dest, Imm n)   (* 标准化为立即数 Move，利于后续折叠 *)
-         | None ->
-             Hashtbl.remove const_map dest;
-             instr)
+    (* 如果遇到 Move(dest, Imm n)，记录这个 dest 是常量 n *)
+    | Move (dest, Imm n) ->
+        Hashtbl.replace const_map dest n;
+        instr
+    (* 对于任何指令，尝试将其操作数中的已知常量替换为 Imm *)
     | _ ->
         let replace_op op =
           match op with
@@ -145,6 +137,7 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
           | BinOp (dest, op, op1, op2) ->
               let op1' = replace_op op1 in
               let op2' = replace_op op2 in
+              (* 如果替换后两个操作数都是 Imm，可以直接计算并变为 Move *)
               (match op1', op2' with
                | Imm n1, Imm n2 ->
                    let result = begin match op with
@@ -173,7 +166,7 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
                | _ -> UnaryOp (dest, op, op1'))
           | _ -> instr
         in
-        (* 如果指令定义了新变量，清除其旧常量记录 *)
+        (* 如果指令定义了一个新变量，从 const_map 中移除（因为值可能改变） *)
         (match instr' with
          | Move (dest, _) | BinOp (dest, _, _, _) | UnaryOp (dest, _, _)
          | Load (dest, _) | LoadGlobal (dest, _) | Call (dest, _, _) ->
@@ -249,20 +242,13 @@ let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
 
 (** 组合所有局部优化 *)
 let optimize_local_block (instrs : ir_instr list) : ir_instr list =
-  let rec fixpoint n instrs =
-    let instrs' =
-      instrs
-      |> constant_folding
-      |> local_constant_propagation
-      |> algebraic_simplification
-      |> store_load_forwarding   (* 新增存储转发 *)
-      |> local_cse
-      |> eliminate_trivial_moves
-    in
-    if n > 10 || instrs' = instrs then instrs'
-    else fixpoint (n+1) instrs'
-  in
-  fixpoint 0 instrs
+  instrs
+  |> constant_folding
+  |> local_constant_propagation   (* 新增：传播常量 *)
+  |> algebraic_simplification
+  |> store_load_forwarding   (* 新增存储转发 *)
+  |> local_cse              (* 添加局部CSE *)
+  |> eliminate_trivial_moves
 
 (** ========== 全局优化 ========== *)
 
@@ -333,9 +319,9 @@ let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   | None -> false
 in
 let is_dead = match def_var with
-  | Some v -> not (List.mem v live_after) && not (has_side_effect instr)
+  | Some v -> not (List.mem v live_after) && not (has_side_effect instr) && not (is_temp_def (Some v))
   | None -> false
-in
+          in
           if is_dead then
             (* 跳过死指令 *)
             process_instrs rest live_after acc

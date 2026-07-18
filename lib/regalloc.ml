@@ -10,7 +10,7 @@ type alloc_function = {
 (** 可用的物理寄存器池 *)
 let temp_regs = ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"]
 let saved_regs = ["s1"; "s2"; "s3"; "s4"; "s5"; "s6"; "s7"; "s8"; "s9"; "s10"; "s11"]
-let available_regs = saved_regs @ temp_regs  (* s寄存器优先 *)
+ let available_regs = saved_regs @ temp_regs (* s寄存器优先 *)
 (** 全局映射表 *)
 let reg_map : (int, string) Hashtbl.t = Hashtbl.create 128
 let spill_slots : (int, int) Hashtbl.t = Hashtbl.create 128
@@ -240,7 +240,8 @@ let apply_allocation (instrs : mach_instr list) (spill_size : int) : mach_instr 
     | La (rd, sym) ->
         let (rd', store_instrs) = map_register_for_def rd in
         [La (rd', sym)] @ store_instrs
-    
+    | Addi (PhysReg "fp", PhysReg "sp", imm) ->
+        [Addi (PhysReg "fp", PhysReg "sp", imm + spill_size)]
     | Addi (rd, rs, imm) ->
         let (rs', load_instrs) = map_register_for_use rs in
         let (rd', store_instrs) = map_register_for_def rd in

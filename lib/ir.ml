@@ -414,8 +414,16 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
   
   | Ast.Unary (op, e1) ->
       let (instrs1, op1) = translate_expr e1 in
-      let dest = fresh_temp () in
-      (instrs1 @ [UnaryOp (dest, op, op1)], dest)
+      (match op1 with
+     | Imm n ->
+         let result = (match op with
+           | Ast.Neg -> -n | Ast.Not -> if n = 0 then 1 else 0
+           | Ast.Pos -> n | _ -> failwith "unsupported unary op"
+         ) in
+         (instrs1, Imm result)
+     | _ ->
+         let dest = fresh_temp () in
+         (instrs1 @ [UnaryOp (dest, op, op1)], dest))
   
   (* && 短路求值 *)
   | Ast.Binary (Ast.And, e1, e2) ->
@@ -458,8 +466,24 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
   | Ast.Binary (op, e1, e2) ->
       let (instrs1, op1) = translate_expr e1 in
       let (instrs2, op2) = translate_expr e2 in
+       (match op1, op2 with
+     | Imm n1, Imm n2 ->
+         let result = (match op with
+           | Ast.Add -> n1 + n2 | Ast.Sub -> n1 - n2
+           | Ast.Mul -> n1 * n2 | Ast.Div when n2 <> 0 -> n1 / n2
+           | Ast.Mod when n2 <> 0 -> n1 mod n2
+           | Ast.Lt -> if n1 < n2 then 1 else 0
+           | Ast.Le -> if n1 <= n2 then 1 else 0
+           | Ast.Gt -> if n1 > n2 then 1 else 0
+           | Ast.Ge -> if n1 >= n2 then 1 else 0
+           | Ast.Eq -> if n1 = n2 then 1 else 0
+           | Ast.Ne -> if n1 <> n2 then 1 else 0
+           | _ -> failwith "unsupported operator in const fold"
+         ) in
+         (instrs2 @ instrs1, Imm result)
+     | _ ->
       let dest = fresh_temp () in
-      (instrs2 @ instrs1 @ [BinOp (dest, op, op1, op2)], dest)
+      (instrs2 @ instrs1 @ [BinOp (dest, op, op1, op2)], dest))
   
   | Ast.Call (func_name, args) ->
       let arg_instrs = List.map translate_expr args in

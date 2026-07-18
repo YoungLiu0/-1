@@ -117,6 +117,64 @@ let constant_folding (instrs : ir_instr list) : ir_instr list =
     | instr -> instr
   ) instrs
 
+(** 局部常量传播：将已知的常量临时变量替换为立即数 *)
+let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
+  let const_map = Hashtbl.create 16 in
+  List.map (fun instr ->
+    match instr with
+    (* 如果遇到 Move(dest, Imm n)，记录这个 dest 是常量 n *)
+    | Move (dest, Imm n) ->
+        Hashtbl.replace const_map dest n;
+        instr
+    (* 对于任何指令，尝试将其操作数中的已知常量替换为 Imm *)
+    | _ ->
+        let replace_op op =
+          match op with
+          | Temp t -> (try Imm (Hashtbl.find const_map (Temp t)) with Not_found -> op)
+          | _ -> op
+        in
+        let instr' = match instr with
+          | BinOp (dest, op, op1, op2) ->
+              let op1' = replace_op op1 in
+              let op2' = replace_op op2 in
+              (* 如果替换后两个操作数都是 Imm，可以直接计算并变为 Move *)
+              (match op1', op2' with
+               | Imm n1, Imm n2 ->
+                   let result = begin match op with
+                     | Ast.Add -> n1 + n2 | Ast.Sub -> n1 - n2
+                     | Ast.Mul -> n1 * n2 | Ast.Div -> if n2=0 then 0 else n1/n2
+                     | Ast.Mod -> if n2=0 then 0 else n1 mod n2
+                     | Ast.Lt -> if n1<n2 then 1 else 0
+                     | Ast.Le -> if n1<=n2 then 1 else 0
+                     | Ast.Gt -> if n1>n2 then 1 else 0
+                     | Ast.Ge -> if n1>=n2 then 1 else 0
+                     | Ast.Eq -> if n1=n2 then 1 else 0
+                     | Ast.Ne -> if n1<>n2 then 1 else 0
+                     | _ -> failwith "unsupported"
+                   end in
+                   Move (dest, Imm result)
+               | _ -> BinOp (dest, op, op1', op2'))
+          | UnaryOp (dest, op, op1) ->
+              let op1' = replace_op op1 in
+              (match op1' with
+               | Imm n ->
+                   let result = match op with
+                     | Ast.Neg -> -n | Ast.Not -> if n=0 then 1 else 0
+                     | Ast.Pos -> n | _ -> failwith "unsupported"
+                   in
+                   Move (dest, Imm result)
+               | _ -> UnaryOp (dest, op, op1'))
+          | _ -> instr
+        in
+        (* 如果指令定义了一个新变量，从 const_map 中移除（因为值可能改变） *)
+        (match instr' with
+         | Move (dest, _) | BinOp (dest, _, _, _) | UnaryOp (dest, _, _)
+         | Load (dest, _) | LoadGlobal (dest, _) | Call (dest, _, _) ->
+             Hashtbl.remove const_map dest
+         | _ -> ());
+        instr'
+  ) instrs
+
 (** 代数化简 - 基本恒等式 *)
 let algebraic_simplification (instrs : ir_instr list) : ir_instr list =
   List.map (function
@@ -154,6 +212,7 @@ let eliminate_trivial_moves (instrs : ir_instr list) : ir_instr list =
 let optimize_local_block (instrs : ir_instr list) : ir_instr list =
   instrs
   |> constant_folding
+   |> local_constant_propagation   (* 新增：传播常量 *)
   |> algebraic_simplification
   |> local_cse              (* 添加局部CSE *)
   |> eliminate_trivial_moves
@@ -302,6 +361,7 @@ let dump_instrs title instrs =
   Printf.eprintf "=== end %s ===\n" title
 
 let optimize_func (func : Ir.ir_func) : Ir.ir_func =
+  Printf.eprintf "[OPT] optimizing %s (%d instrs)\n" func.name (List.length func.body);
   let cfg = Cfg_builder.build_cfg func in
   let optimized_cfg = optimize_cfg cfg in
   let body = Cfg.cfg_to_linear optimized_cfg in

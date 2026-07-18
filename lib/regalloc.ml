@@ -41,6 +41,7 @@ let get_vreg_id = function
 let is_spilled vreg =
   not (Hashtbl.mem reg_map vreg)
 
+
 (** 从 register 提取 vreg id option *)
 let get_vreg_from_register = function
   | VReg id -> Some id
@@ -83,6 +84,33 @@ let fresh_temp () =
   incr temp_counter;
   reg
 
+(* 尾递归收集指令列表中所有物理寄存器名（不去重） *)
+let phys_reg_names_of_instrs instrs =
+  let rec aux acc = function
+    | [] -> acc
+    | instr :: rest ->
+        let regs = match instr with
+          | Label _ | J _ | Call _ | MRet
+          | FrameSetup _ | FrameTeardown _ -> []
+          | Li (rd, _) | La (rd, _) -> [rd]
+          | Mv (rd, rs) | Addi (rd, rs, _)
+          | Neg (rd, rs) | Seqz (rd, rs) | Snez (rd, rs) -> [rd; rs]
+          | Lw (rd, _, rs) -> [rd; rs]
+          | Sw (rs, _, rd) -> [rs; rd]
+          | Add (rd, rs1, rs2) | Sub (rd, rs1, rs2)
+          | Mul (rd, rs1, rs2) | Div (rd, rs1, rs2)
+          | Rem (rd, rs1, rs2)
+          | Slt (rd, rs1, rs2) | Sle (rd, rs1, rs2)
+          | Sgt (rd, rs1, rs2) | Sge (rd, rs1, rs2)
+          | Seq (rd, rs1, rs2) | Sne (rd, rs1, rs2) -> [rd; rs1; rs2]
+          | Beqz (rs, _) | Bnez (rs, _) -> [rs]
+          | _ -> []   (* 安全网 *)
+        in
+        let names = List.filter_map (function PhysReg n -> Some n | VReg _ -> None) regs in
+        aux (names @ acc) rest
+  in
+  aux [] instrs
+  
 (** ========== 3. 活跃区间计算 ========== *)
 
 let compute_live_intervals (instrs : mach_instr list) : live_interval list =
@@ -354,6 +382,7 @@ let apply_allocation (instrs : mach_instr list) (spill_size : int) : mach_instr 
   
   List.concat_map transform_instr instrs
 
+  
 (** ========== 7. 主入口函数 ========== *)
 
 let allocate_registers (mfunc : Select.machine_func) : alloc_function =
@@ -374,5 +403,33 @@ let allocate_registers (mfunc : Select.machine_func) : alloc_function =
   
   (* 应用分配结果，重写指令 *)
   let new_instrs = apply_allocation mfunc.instrs !spill_slot_count in
-  
-  { name = mfunc.name; instrs = new_instrs }
+
+  (* 排除栈帧保存/恢复指令，避免它们自指 *)
+  let non_frame_instrs = List.filter (fun instr ->
+    match instr with
+    | Sw (_, _, PhysReg "fp") | Lw (_, _, PhysReg "fp") -> false
+    | _ -> true
+  ) new_instrs in
+
+  (* 收集函数体实际用到的 s 寄存器 *)
+  let used_s =
+    phys_reg_names_of_instrs non_frame_instrs
+    |> List.filter (fun n -> List.mem n saved_regs)
+    |> List.sort_uniq String.compare
+  in
+
+   (* 调试：打印用到的 s 寄存器 *)
+  Printf.eprintf "[OPT] used s registers in %s: %s\n"
+    mfunc.name (String.concat ", " used_s);
+    
+  (* 过滤未用到的 s 寄存器保存/恢复指令 *)
+  let filtered_instrs =
+    List.filter (fun instr ->
+      match instr with
+      | Sw (PhysReg name, _, PhysReg "fp")
+      | Lw (PhysReg name, _, PhysReg "fp") ->
+          not (List.mem name saved_regs) || List.mem name used_s
+      | _ -> true
+    ) new_instrs
+  in
+ { name = mfunc.name; instrs = filtered_instrs }

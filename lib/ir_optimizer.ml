@@ -1,28 +1,18 @@
-(* 中端优化,在 CFG 上跑常量传播、死代码删除*)
-(** IR 优化器（Step 1 直接返回原 CFG，不做任何优化） *)
-
-
-(** IR 优化器 - 保守但正确的实现 *)
-
 open Ir
 open Cfg
-
-(** ========== 辅助函数 ========== *)
-
-(** 判断指令是否有副作用（不可删除） *)
+(* ========== 辅助函数 ========== *)
+(* 判断指令是否有副作用（不可删除） *)
 let has_side_effect = function
   | Ret _ | Call _ | StoreGlobal _ | Jump _ 
   | BranchZero _ | BranchNonZero _ | Label _ -> true
   | Store _ -> true  (* 保守处理：认为所有 Store 都有副作用 *)
   | _ -> false
-
 (** 从操作数获取立即数值 *)
 let get_imm = function
   | Imm n -> Some n
   | _ -> None
-
-(** ========== 局部优化（安全的部分）========== *)
-
+(* ========== 局部优化========== *)
+(*局部公共子表达式消除*)
 let local_cse (instrs : ir_instr list) : ir_instr list =
   let cache = Hashtbl.create 16 in
   
@@ -85,8 +75,7 @@ let local_cse (instrs : ir_instr list) : ir_instr list =
     
     | instr -> instr
   ) instrs
-
-(** 常量折叠 - 编译时计算常量表达式 *)
+(* 常量折叠 - 编译时计算常量表达式 *)
 let constant_folding (instrs : ir_instr list) : ir_instr list =
   List.map (function
     | BinOp (dest, op, Imm n1, Imm n2) ->
@@ -116,8 +105,7 @@ let constant_folding (instrs : ir_instr list) : ir_instr list =
     
     | instr -> instr
   ) instrs
-
-(** 局部常量传播：将已知的常量临时变量替换为立即数 *)
+(* 局部常量传播：将已知的常量临时变量替换为立即数 *)
 let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
   let const_map = Hashtbl.create 16 in
   List.map (fun instr ->
@@ -174,8 +162,7 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
          | _ -> ());
         instr'
   ) instrs
-
-(** 代数化简 - 基本恒等式 *)
+(* 代数化简 - 基本恒等式 *)
 let algebraic_simplification (instrs : ir_instr list) : ir_instr list =
   List.map (function
     (* x + 0 = x *)
@@ -199,30 +186,29 @@ let algebraic_simplification (instrs : ir_instr list) : ir_instr list =
     (* 其他保持不变 *)
     | instr -> instr
   ) instrs
-
-(** 局部无用 Move 消除：Move(x, x) 是无操作 *)
+(* 局部无用 Move 消除：Move(x, x) 是无操作 *)
 let eliminate_trivial_moves (instrs : ir_instr list) : ir_instr list =
   List.filter (function
     | Move (Temp t1, Temp t2) when t1 = t2 -> false
     | Move (Local v1, Local v2) when v1 = v2 -> false
     | _ -> true
   ) instrs
-
-  (** 局部存储转发 + 前向值替换 *)
+(* 局部存储转发 + 前向值替换 *)
 let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
   (* 维护变量名 -> 当前已知值的映射 *)
   let value_map = Hashtbl.create 16 in
-  
   (* 如果某指令可能修改内存，则清空映射 *)
   let invalidate_all () = Hashtbl.clear value_map in
-  
   List.map (fun instr ->
     match instr with
+     | Label _ ->
+        (* 遇到 Label，清空所有映射（可能是其他路径的入口） *)
+        invalidate_all ();
+        instr
     (* 遇到 Store，记录这个变量的值，并生成指令 *)
     | Store (var, src) ->
         Hashtbl.replace value_map var src;
         instr   (* 暂时保留，后续死代码删除会移除无用 Store *)
-    
     (* 遇到 Load，如果映射中有值，则替换为 Move *)
     | Load (dest, var) ->
         (match Hashtbl.find_opt value_map var with
@@ -230,16 +216,13 @@ let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
              (* 用 Move 代替 Load，并从映射中移除（因为值被读取后，后续 Load 可以继续使用，除非有 Store 改变？保守起见不移除，但遇到 Store 会更新映射，所以安全） *)
              Move (dest, src)
          | None -> instr)
-    
     (* 全局 Store 和函数调用会破坏局部变量假设，清空映射 *)
     | StoreGlobal _ | Call _ ->
         invalidate_all ();
         instr
-    
     (* 所有其他指令保持不变，但注意：如果指令定义了某个映射中的变量（如 Move 或 BinOp 的目标是 Local），是否需要更新？这里我们只处理 Store/Load 变量，其他变量不影响映射 *)
     | _ -> instr
   ) instrs
-
 (** 组合所有局部优化 *)
 let optimize_local_block (instrs : ir_instr list) : ir_instr list =
   instrs
@@ -249,10 +232,8 @@ let optimize_local_block (instrs : ir_instr list) : ir_instr list =
   |> store_load_forwarding   (* 新增存储转发 *)
   |> local_cse              (* 添加局部CSE *)
   |> eliminate_trivial_moves
-
-(** ========== 全局优化 ========== *)
-
-(** 不可达代码消除 - 基于 CFG 的可达性分析 *)
+(* ========== 全局优化 ========== *)
+(* 不可达代码消除 - 基于 CFG 的可达性分析 *)
 let unreachable_code_elimination (cfg : Cfg.t) : Cfg.t =
   let reachable = Hashtbl.create (List.length cfg.labels) in
   
@@ -280,8 +261,7 @@ let unreachable_code_elimination (cfg : Cfg.t) : Cfg.t =
   ) labels';
   
   { blocks = blocks'; labels = labels'; entry = cfg.entry; preds = preds'; succs = succs' }
-
-(** 简单的死代码消除 - 基于活跃变量分析 *)
+(* 简单的死代码消除 - 基于活跃变量分析 *)
 let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   (* 执行活跃变量分析 *)
   let live_result = Live_vars.analyze cfg in
@@ -342,11 +322,8 @@ let is_dead = match def_var with
   ) cfg.labels;
   { cfg with blocks = blocks' }
 
-(** 局部公共子表达式消除（在单个基本块内） *)
-
-(** ========== 主优化流程 ========== *)
-
-(** 对 CFG 执行局部优化 *)
+(* ========== 主优化流程 ========== *)
+(* 对 CFG 执行局部优化 *)
 let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
   let blocks' = Hashtbl.create (Hashtbl.length cfg.blocks) in
   
@@ -358,7 +335,7 @@ let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
   
   { cfg with blocks = blocks' }
 
-(** 完整优化流程：局部优化 → 全局优化（迭代一次） *)
+(* 完整优化流程：局部优化 → 全局优化（迭代一次） *)
 let optimize_cfg (cfg : Cfg.t) : Cfg.t =
   cfg
   |> optimize_cfg_local
@@ -368,8 +345,6 @@ let optimize_cfg (cfg : Cfg.t) : Cfg.t =
   |> unreachable_code_elimination
   |> dead_code_elimination
   |> optimize_cfg_local  
-
-  (** 对单个 ir_func 进行优化，返回优化后的 ir_func *)
 
 (* 简要描述指令，用于调试 *)
 let string_of_instr = function
@@ -392,7 +367,7 @@ let dump_instrs title instrs =
   Printf.eprintf "=== %s ===\n" title;
   List.iter (fun i -> Printf.eprintf "%s\n" (string_of_instr i)) instrs;
   Printf.eprintf "=== end %s ===\n" title
-
+(**)
 let optimize_func (func : Ir.ir_func) : Ir.ir_func =
   Printf.eprintf "[OPT] optimizing %s (%d instrs)\n" func.name (List.length func.body);
   let cfg = Cfg_builder.build_cfg func in

@@ -13,7 +13,7 @@ open Cfg
 let has_side_effect = function
   | Ret _ | Call _ | StoreGlobal _ | Jump _ 
   | BranchZero _ | BranchNonZero _ | Label _ -> true
-  | Store _ -> true  (* 保守处理：认为所有 Store 都有副作用 *)
+  | Store _ -> false  (* 保守处理：认为所有 Store 都有副作用 *)
   | _ -> false
 
 (** 从操作数获取立即数值 *)
@@ -119,14 +119,22 @@ let constant_folding (instrs : ir_instr list) : ir_instr list =
 
 (** 局部常量传播：将已知的常量临时变量替换为立即数 *)
 let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
-  let const_map = Hashtbl.create 16 in
+  let const_map : (operand, int) Hashtbl.t = Hashtbl.create 16 in
   List.map (fun instr ->
     match instr with
-    (* 如果遇到 Move(dest, Imm n)，记录这个 dest 是常量 n *)
-    | Move (dest, Imm n) ->
-        Hashtbl.replace const_map dest n;
-        instr
-    (* 对于任何指令，尝试将其操作数中的已知常量替换为 Imm *)
+    | Move (dest, src) ->
+        (* 尝试从 src 获取常量值，无论是 Imm 还是已知常量的 Temp/Local *)
+        let value = match src with
+          | Imm n -> Some n
+          | _ -> Hashtbl.find_opt const_map src
+        in
+        (match value with
+         | Some n ->
+             Hashtbl.replace const_map dest n;
+             Move (dest, Imm n)   (* 标准化为立即数 Move，利于后续折叠 *)
+         | None ->
+             Hashtbl.remove const_map dest;
+             instr)
     | _ ->
         let replace_op op =
           match op with
@@ -137,7 +145,6 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
           | BinOp (dest, op, op1, op2) ->
               let op1' = replace_op op1 in
               let op2' = replace_op op2 in
-              (* 如果替换后两个操作数都是 Imm，可以直接计算并变为 Move *)
               (match op1', op2' with
                | Imm n1, Imm n2 ->
                    let result = begin match op with
@@ -166,7 +173,7 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
                | _ -> UnaryOp (dest, op, op1'))
           | _ -> instr
         in
-        (* 如果指令定义了一个新变量，从 const_map 中移除（因为值可能改变） *)
+        (* 如果指令定义了新变量，清除其旧常量记录 *)
         (match instr' with
          | Move (dest, _) | BinOp (dest, _, _, _) | UnaryOp (dest, _, _)
          | Load (dest, _) | LoadGlobal (dest, _) | Call (dest, _, _) ->
@@ -208,14 +215,54 @@ let eliminate_trivial_moves (instrs : ir_instr list) : ir_instr list =
     | _ -> true
   ) instrs
 
+  (** 局部存储转发 + 前向值替换 *)
+let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
+  (* 维护变量名 -> 当前已知值的映射 *)
+  let value_map = Hashtbl.create 16 in
+  
+  (* 如果某指令可能修改内存，则清空映射 *)
+  let invalidate_all () = Hashtbl.clear value_map in
+  
+  List.map (fun instr ->
+    match instr with
+    (* 遇到 Store，记录这个变量的值，并生成指令 *)
+    | Store (var, src) ->
+        Hashtbl.replace value_map var src;
+        instr   (* 暂时保留，后续死代码删除会移除无用 Store *)
+    
+    (* 遇到 Load，如果映射中有值，则替换为 Move *)
+    | Load (dest, var) ->
+        (match Hashtbl.find_opt value_map var with
+         | Some src ->
+             (* 用 Move 代替 Load，并从映射中移除（因为值被读取后，后续 Load 可以继续使用，除非有 Store 改变？保守起见不移除，但遇到 Store 会更新映射，所以安全） *)
+             Move (dest, src)
+         | None -> instr)
+    
+    (* 全局 Store 和函数调用会破坏局部变量假设，清空映射 *)
+    | StoreGlobal _ | Call _ ->
+        invalidate_all ();
+        instr
+    
+    (* 所有其他指令保持不变，但注意：如果指令定义了某个映射中的变量（如 Move 或 BinOp 的目标是 Local），是否需要更新？这里我们只处理 Store/Load 变量，其他变量不影响映射 *)
+    | _ -> instr
+  ) instrs
+
 (** 组合所有局部优化 *)
 let optimize_local_block (instrs : ir_instr list) : ir_instr list =
-  instrs
-  |> constant_folding
-   |> local_constant_propagation   (* 新增：传播常量 *)
-  |> algebraic_simplification
-  |> local_cse              (* 添加局部CSE *)
-  |> eliminate_trivial_moves
+  let rec fixpoint n instrs =
+    let instrs' =
+      instrs
+      |> constant_folding
+      |> local_constant_propagation
+      |> algebraic_simplification
+      |> store_load_forwarding   (* 新增存储转发 *)
+      |> local_cse
+      |> eliminate_trivial_moves
+    in
+    if n > 10 || instrs' = instrs then instrs'
+    else fixpoint (n+1) instrs'
+  in
+  fixpoint 0 instrs
 
 (** ========== 全局优化 ========== *)
 
@@ -286,9 +333,9 @@ let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   | None -> false
 in
 let is_dead = match def_var with
-  | Some v -> not (List.mem v live_after) && not (has_side_effect instr) && not (is_temp_def (Some v))
+  | Some v -> not (List.mem v live_after) && not (has_side_effect instr)
   | None -> false
-          in
+in
           if is_dead then
             (* 跳过死指令 *)
             process_instrs rest live_after acc

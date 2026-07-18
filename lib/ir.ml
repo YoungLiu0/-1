@@ -232,6 +232,10 @@ and translate_func (f : Ast.func_def) : ir_func =
   loop_stack := [];
   Hashtbl.clear local_const_table;   (* ← 新增这一行 *)
   enter_scope ();      (* 函数级作用域 *)
+  (* 调试：打印函数信息到 stderr *)
+Printf.eprintf "[DBG] func: %s, params: [%s]\n"
+  f.f_name
+  (String.concat "; " f.f_params);
   (* 将参数加入符号表，参数视为局部变量，需要栈空间 *)
   List.iter (fun param -> 
     add_symbol param false None false;
@@ -245,7 +249,10 @@ and translate_func (f : Ast.func_def) : ir_func =
     | None -> p   (* 理论上不会发生，因为参数已插入符号表 *)
   ) f.f_params in
   let body_instrs = translate_stmt f.f_body in
-  
+  Printf.eprintf "[DBG] ir_params: [%s]\n" (String.concat "; " ir_params);
+Printf.eprintf "[DBG] locals: [%s]\n" (String.concat "; " !local_vars);
+Printf.eprintf "[DBG] global vars: [%s]\n"
+  (String.concat "; " (List.map (fun g -> g.g_name) (List.rev !global_vars)));
   (* 为 void 函数自动添加 return，避免控制流末端悬空 *)
   let body_instrs =
     if f.f_type = Ast.Void then

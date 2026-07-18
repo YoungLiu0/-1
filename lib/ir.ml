@@ -54,7 +54,6 @@ type ir_global = {
 let unique_var_counter = ref 0
 
 let global_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
-let global_symbol_table : var_info StringMap.t ref = ref StringMap.empty  (* 新增 *)
 let local_const_table : (string, int) Hashtbl.t = Hashtbl.create 16
 let rec eval_const_expr = function
  | Ast.IntLit n -> Some n
@@ -92,9 +91,9 @@ let enter_scope () =
   symbol_stack := List.tl !symbol_stack
 
 
-let lookup_symbol name =
+  let lookup_symbol name =
   let rec search = function
-    | [] -> StringMap.find_opt name !global_symbol_table   (* 找不到则查全局表 *)
+    | [] -> None
     | scope :: rest ->
         match StringMap.find_opt name scope with
         | Some info -> Some info
@@ -112,7 +111,7 @@ let add_symbol name is_const value is_global =
   | [] -> failwith "No scope to add symbol"
   | current :: rest ->
     let ir_name = 
-      if lookup_current_scope  name <> None then
+      if lookup_symbol name <> None then (* ← 这里检测整个作用域栈中是否存在同名变量 *)
         let new_name = name ^"_"^string_of_int !unique_var_counter in
     incr unique_var_counter;
     new_name
@@ -194,27 +193,26 @@ let rec translate_program (prog : Ast.program) : ir_program =
   reset_globals ();
   
   (* 第一遍：收集所有全局变量 *)
- let collect_global = function
-  | Ast.GlobalVarDecl (name, init_expr) ->
-      let init_val = match init_expr with
-        | Ast.IntLit n -> Some n
-        | _ -> None
-      in
-      add_global_var name false init_val;
-      let info = { name; is_const=false; value=init_val; is_global=true; ir_name=name } in
-      global_symbol_table := StringMap.add name info !global_symbol_table
-  | Ast.GlobalConstDecl (name, init_expr) ->
-      let init_val = eval_const_expr init_expr in
-      (match init_val with
-       | Some v -> Hashtbl.add global_const_table name v
-       | None -> failwith ("Global constant '" ^ name ^ "' must be a compile-time constant"));
-      add_global_var name true init_val;
-      let info = { name; is_const=true; value=init_val; is_global=true; ir_name=name } in
-      global_symbol_table := StringMap.add name info !global_symbol_table
-  | _ -> ()
+  let collect_global = function
+    | Ast.GlobalVarDecl (name, init_expr) ->
+        let init_val = match init_expr with
+          | Ast.IntLit n -> Some n
+          | _ -> None
+        in
+        add_global_var name false init_val
+    | Ast.GlobalConstDecl (name, init_expr) ->
+        let init_val = eval_const_expr init_expr in
+         (match init_val with
+         | Some v -> Hashtbl.add global_const_table name v
+        | None -> failwith ("Global constant '" ^ name ^ "' must be a compile-time constant"));
+          add_global_var name true init_val
+    | _ -> ()
   in
   List.iter collect_global prog;
   
+  symbol_stack := [];
+  enter_scope ();
+  List.iter (fun g -> add_symbol g.g_name g.g_is_const g.g_init true) (List.rev !global_vars);
   (* 第二遍：翻译函数 *)
   let functions = List.filter_map (function
     | Ast.FuncDef f -> Some (translate_func f)
@@ -231,21 +229,21 @@ and translate_func (f : Ast.func_def) : ir_func =
   reset_temp_counter ();
   reset_label_counter ();
   reset_locals ();
-  symbol_stack := [];
   loop_stack := [];
   Hashtbl.clear local_const_table;   (* ← 新增这一行 *)
   enter_scope ();      (* 函数级作用域 *)
-  (* 将全局变量加入符号表（所有函数都能看到全局变量） *)
-  (* List.iter (fun g ->
-    add_symbol g.g_name g.g_is_const g.g_init true
-  ) (List.rev !global_vars); *)
   (* 将参数加入符号表，参数视为局部变量，需要栈空间 *)
   List.iter (fun param -> 
     add_symbol param false None false;
-   let ir_name = get_ir_name param in
+    let ir_name = (lookup_symbol param |> Option.get).ir_name in
     add_local_var ir_name
   ) f.f_params;
   
+  let ir_params=List.map (fun p ->
+    match lookup_symbol p with
+    | Some info -> info.ir_name
+    | None -> p   (* 理论上不会发生，因为参数已插入符号表 *)
+  ) f.f_params in
   let body_instrs = translate_stmt f.f_body in
   
   (* 为 void 函数自动添加 return，避免控制流末端悬空 *)
@@ -261,7 +259,7 @@ and translate_func (f : Ast.func_def) : ir_func =
   
   { name      = f.f_name;
     ret_type  = f.f_type;
-    params    = f.f_params;
+    params    = ir_params;
     body      = body_instrs;
     locals    = List.rev !local_vars }
 
@@ -393,17 +391,20 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
   | Ast.Var name ->
       (match lookup_symbol name with
        | None -> failwith ("Undefined variable: " ^ name)
-       | Some info when info.is_const ->
-          (match info.value with
-           | Some n -> ([], Imm n)
-           | None -> failwith ("Constant '" ^ name ^ "' has no compile-time value"))
+      | Some info when info.is_const ->
+         (* 从编译期常量表取值，折叠为立即数 *)
+        (match info.value with
+          | Some n -> ([], Imm n)
+          | None -> failwith ("Constant '" ^ name ^ "' has no compile-time value"))
        | Some info when info.is_global ->
            let dest = fresh_temp () in
+
            ([LoadGlobal (dest, name)], dest)
-       | Some info ->
-           let ir_name = info.ir_name in
+       | Some info->
+        let ir_name = info.ir_name in
            let dest = fresh_temp () in
            ([Load (dest, ir_name)], dest))
+  
   | Ast.Unary (op, e1) ->
       let (instrs1, op1) = translate_expr e1 in
       let dest = fresh_temp () in
@@ -451,7 +452,7 @@ and translate_expr (e : Ast.expr) : ir_instr list * operand =
       let (instrs1, op1) = translate_expr e1 in
       let (instrs2, op2) = translate_expr e2 in
       let dest = fresh_temp () in
-      (instrs1 @ instrs2 @ [BinOp (dest, op, op1, op2)], dest)
+      (instrs2 @ instrs1 @ [BinOp (dest, op, op1, op2)], dest)
   
   | Ast.Call (func_name, args) ->
       let arg_instrs = List.map translate_expr args in

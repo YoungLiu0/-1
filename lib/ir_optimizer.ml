@@ -75,7 +75,7 @@ let local_cse (instrs : ir_instr list) : ir_instr list =
     
     | instr -> instr
   ) instrs
-(* 常量折叠 - 编译时计算常量表达式 *)
+(*常量折叠 - 编译时计算常量表达式 *)
 let constant_folding (instrs : ir_instr list) : ir_instr list =
   List.map (function
     | BinOp (dest, op, Imm n1, Imm n2) ->
@@ -105,7 +105,7 @@ let constant_folding (instrs : ir_instr list) : ir_instr list =
     
     | instr -> instr
   ) instrs
-(* 局部常量传播：将已知的常量临时变量替换为立即数 *)
+(*局部常量传播：将已知的常量临时变量替换为立即数 *)
 let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
   let const_map = Hashtbl.create 16 in
   List.map (fun instr ->
@@ -162,7 +162,7 @@ let local_constant_propagation (instrs : ir_instr list) : ir_instr list =
          | _ -> ());
         instr'
   ) instrs
-(* 代数化简 - 基本恒等式 *)
+(*代数化简 - 基本恒等式 *)
 let algebraic_simplification (instrs : ir_instr list) : ir_instr list =
   List.map (function
     (* x + 0 = x *)
@@ -223,7 +223,7 @@ let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
     (* 所有其他指令保持不变，但注意：如果指令定义了某个映射中的变量（如 Move 或 BinOp 的目标是 Local），是否需要更新？这里我们只处理 Store/Load 变量，其他变量不影响映射 *)
     | _ -> instr
   ) instrs
-(** 组合所有局部优化 *)
+(* 组合所有局部优化 *)
 let optimize_local_block (instrs : ir_instr list) : ir_instr list =
   instrs
   |> constant_folding
@@ -233,7 +233,7 @@ let optimize_local_block (instrs : ir_instr list) : ir_instr list =
   |> local_cse              (* 添加局部CSE *)
   |> eliminate_trivial_moves
 (* ========== 全局优化 ========== *)
-(* 不可达代码消除 - 基于 CFG 的可达性分析 *)
+(* 不可达代码消除-基于 CFG 的可达性分析 *)
 let unreachable_code_elimination (cfg : Cfg.t) : Cfg.t =
   let reachable = Hashtbl.create (List.length cfg.labels) in
   
@@ -261,7 +261,7 @@ let unreachable_code_elimination (cfg : Cfg.t) : Cfg.t =
   ) labels';
   
   { blocks = blocks'; labels = labels'; entry = cfg.entry; preds = preds'; succs = succs' }
-(* 简单的死代码消除 - 基于活跃变量分析 *)
+(*死代码消除 - 基于活跃变量分析 *)
 let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   (* 执行活跃变量分析 *)
   let live_result = Live_vars.analyze cfg in
@@ -321,7 +321,6 @@ let is_dead = match def_var with
     Hashtbl.add blocks' lbl { block with instrs = filtered_instrs }
   ) cfg.labels;
   { cfg with blocks = blocks' }
-
 (* ========== 主优化流程 ========== *)
 (* 对 CFG 执行局部优化 *)
 let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
@@ -334,18 +333,16 @@ let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
   ) cfg.labels;
   
   { cfg with blocks = blocks' }
-
 (* 完整优化流程：局部优化 → 全局优化（迭代一次） *)
 let optimize_cfg (cfg : Cfg.t) : Cfg.t =
   cfg
   |> optimize_cfg_local
-  |> Const_prop.global_constant_propagation  (* 全局常量传播 *)
-  |> Copy_prop.global_copy_propagation       (* 全局拷贝传播 *)
+  (* |> Const_prop.global_constant_propagation  (* 全局常量传播 *)
+  |> Copy_prop.global_copy_propagation       全局拷贝传播 *)
   |> optimize_cfg_local                (* 传播后再做一遍局部优化 *)
   |> unreachable_code_elimination
   |> dead_code_elimination
   |> optimize_cfg_local  
-
 (* 简要描述指令，用于调试 *)
 let string_of_instr = function
   | Ir.Label s -> "Label " ^ s
@@ -362,12 +359,11 @@ let string_of_instr = function
   | Ir.Alloc _ -> "Alloc"
   | Ir.Call (_, _, _) -> "Call"
   | _ -> "Other"
-
 let dump_instrs title instrs =
   Printf.eprintf "=== %s ===\n" title;
   List.iter (fun i -> Printf.eprintf "%s\n" (string_of_instr i)) instrs;
   Printf.eprintf "=== end %s ===\n" title
-(**)
+(*优化器的主入口*)
 let optimize_func (func : Ir.ir_func) : Ir.ir_func =
   Printf.eprintf "[OPT] optimizing %s (%d instrs)\n" func.name (List.length func.body);
   let cfg = Cfg_builder.build_cfg func in

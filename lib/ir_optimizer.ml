@@ -299,7 +299,7 @@ let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   | None -> false
 in
 let is_dead = match def_var with
-  | Some v -> not (List.mem v live_after) && not (has_side_effect instr) && not (is_temp_def (Some v))
+  | Some v -> not (List.mem v live_after) && not (has_side_effect instr)
   | None -> false
           in
           if is_dead then

@@ -365,8 +365,8 @@ let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
 let optimize_cfg (cfg : Cfg.t) : Cfg.t =
   cfg
   |> optimize_cfg_local
-    |> Loop_var_cache.cache_loop_vars_in_cfg    (* 循环变量寄存器缓存 *)
   |> Loop_unrolling.unroll_loops_once    (* 循环展开 *)
+  |> Loop_var_cache.cache_loop_vars_in_cfg    (* 循环变量寄存器缓存 *)
   (* |> Const_prop.global_constant_propagation  (* 全局常量传播 *)
   |> Copy_prop.global_copy_propagation       全局拷贝传播 *)
   |> optimize_cfg_local                (* 传播后再做一遍局部优化 *)

@@ -465,8 +465,49 @@ let peephole_move_elimination (instrs : mach_instr list) : mach_instr list =
         transform (instr' :: acc) rest
   in
   transform [] instrs
+(* ========== 基本块内死 Mv/Li 消除 ========== *)
+(* ========== 安全的基本块内死 Mv/Li 消除（基于全局使用集） ========== *)
+let eliminate_dead_in_block (instrs : mach_instr list) : mach_instr list =
+  (* 提取指令使用的所有物理寄存器名（与之前相同） *)
+  let use_phys_regs instr =
+    let reg_of = function PhysReg n -> Some n | _ -> None in
+    match instr with
+    | Mv (_, src) -> (match reg_of src with Some n -> [n] | None -> [])
+    | Addi (_, rs, _) | Lw (_, _, rs) ->
+        (match reg_of rs with Some n -> [n] | None -> [])
+    | Sw (rs, _, rd) ->
+        List.filter_map (fun r -> r) [reg_of rs; reg_of rd]
+    | Add (_, rs1, rs2) | Sub (_, rs1, rs2) | Mul (_, rs1, rs2)
+    | Div (_, rs1, rs2) | Rem (_, rs1, rs2)
+    | Slt (_, rs1, rs2) | Sle (_, rs1, rs2) | Sgt (_, rs1, rs2)
+    | Sge (_, rs1, rs2) | Seq (_, rs1, rs2) | Sne (_, rs1, rs2) ->
+        List.filter_map (fun r -> r) [reg_of rs1; reg_of rs2]
+    | Neg (_, rs) | Seqz (_, rs) | Snez (_, rs) ->
+        (match reg_of rs with Some n -> [n] | None -> [])
+    | Beqz (rs, _) | Bnez (rs, _) ->
+        (match reg_of rs with Some n -> [n] | None -> [])
+    | _ -> []
+  in
 
-  (** ========== 7. 主入口函数 ========== *)
+  (* 第一步：收集整个函数中所有被使用过的物理寄存器（全局使用集） *)
+  let all_uses = Hashtbl.create 64 in
+  List.iter (fun instr ->
+    List.iter (fun reg_name -> Hashtbl.replace all_uses reg_name true) (use_phys_regs instr)
+  ) instrs;
+
+  (* 第二步：逐条处理，删除那些目标寄存器从不在 all_uses 中的 Mv/Li *)
+  let rec filter_instrs acc = function
+    | [] -> List.rev acc
+    | (Mv (PhysReg rd, _) as instr) :: rest
+    | (Li (PhysReg rd, _) as instr) :: rest ->
+        if Hashtbl.mem all_uses rd then
+          filter_instrs (instr :: acc) rest
+        else
+          filter_instrs acc rest   (* 死指令，丢弃 *)
+    | instr :: rest ->
+        filter_instrs (instr :: acc) rest
+  in
+  filter_instrs [] instrs (** ========== 7. 主入口函数 ========== *)
 let allocate_registers (mfunc : Select.machine_func) : alloc_function =
 
   (* 初始化 *)
@@ -515,5 +556,6 @@ let allocate_registers (mfunc : Select.machine_func) : alloc_function =
     ) new_instrs
   in
     let optimized_instrs = peephole_move_elimination filtered_instrs in
+  let optimized_instrs = eliminate_dead_in_block optimized_instrs in  
   { name = mfunc.name; instrs = optimized_instrs }
 

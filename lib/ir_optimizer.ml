@@ -1,6 +1,5 @@
 open Ir
 open Cfg
-
 (* ========== 辅助函数 ========== *)
 (* 判断指令是否有副作用（不可删除） *)
 let has_side_effect = function
@@ -202,10 +201,7 @@ let store_load_forwarding (instrs : ir_instr list) : ir_instr list =
   let invalidate_all () = Hashtbl.clear value_map in
   List.map (fun instr ->
     match instr with
-     | Label _ ->
-        (* 遇到 Label，清空所有映射（可能是其他路径的入口） *)
-        invalidate_all ();
-        instr
+     | Label _ ->instr;
     (* 遇到 Store，记录这个变量的值，并生成指令 *)
     | Store (var, src) ->
         Hashtbl.replace value_map var src;
@@ -322,7 +318,36 @@ let is_dead = match def_var with
     Hashtbl.add blocks' lbl { block with instrs = filtered_instrs }
   ) cfg.labels;
   { cfg with blocks = blocks' }
-(* ========== 主优化流程 ========== *)
+
+(*其他优化*)
+(* 尾递归消除：将递归调用转为跳转，复用栈帧 *)
+let tail_call_elimination (func : Ir.ir_func) : Ir.ir_func =
+  let entry_label = func.name ^ "_entry" in
+  let rec has_tail_call = function
+    | (Ir.Call (_, fname, _)) :: (Ir.Ret (Some _)) :: _ when fname = func.name -> true
+    | _ :: rest -> has_tail_call rest
+    | [] -> false
+  in
+  if not (has_tail_call func.body) then func
+  else
+    let rec replace_tail_calls acc = function
+      | (Ir.Call (dest, fname, args)) :: (Ir.Ret (Some dest')) :: rest
+        when fname = func.name && dest = dest' ->
+          let stores =
+            try List.map2 (fun param arg -> Ir.Store (param, arg)) func.params args
+            with Invalid_argument _ -> []
+          in
+          if stores = [] then
+            replace_tail_calls (Ir.Ret (Some dest') :: Ir.Call (dest, fname, args) :: acc) rest
+          else
+            let new_instrs = stores @ [Ir.Jump entry_label] in
+            replace_tail_calls (List.rev_append new_instrs acc) rest
+      | instr :: rest -> replace_tail_calls (instr :: acc) rest
+      | [] -> List.rev acc
+    in
+    let new_body = Ir.Label entry_label :: replace_tail_calls [] func.body in
+    { func with body = new_body }
+  (* ========== 主优化流程 ========== *)
 (* 对 CFG 执行局部优化 *)
 let optimize_cfg_local (cfg : Cfg.t) : Cfg.t =
   let blocks' = Hashtbl.create (Hashtbl.length cfg.blocks) in
@@ -366,6 +391,7 @@ let dump_instrs title instrs =
   Printf.eprintf "=== end %s ===\n" title
 (*优化器的主入口*)
 let optimize_func (func : Ir.ir_func) : Ir.ir_func =
+   let func = tail_call_elimination func in
   Printf.eprintf "[OPT] optimizing %s (%d instrs)\n" func.name (List.length func.body);
   let cfg = Cfg_builder.build_cfg func in
   let optimized_cfg = optimize_cfg cfg in

@@ -555,7 +555,7 @@ let allocate_registers (mfunc : Select.machine_func) : alloc_function =
       | _ -> true
     ) new_instrs
   in
-    let optimized_instrs = peephole_move_elimination filtered_instrs in
-  let optimized_instrs = eliminate_dead_in_block optimized_instrs in  
+    let optimized_instrs =  filtered_instrs in
+  (* let optimized_instrs = eliminate_dead_in_block optimized_instrs in   *)
   { name = mfunc.name; instrs = optimized_instrs }
 

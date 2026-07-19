@@ -421,7 +421,6 @@ let allocate_registers (mfunc : Select.machine_func) : alloc_function =
    (* 调试：打印用到的 s 寄存器 *)
   Printf.eprintf "[OPT] used s registers in %s: %s\n"
     mfunc.name (String.concat ", " used_s);
-    
   (* 过滤未用到的 s 寄存器保存/恢复指令 *)
   let filtered_instrs =
     List.filter (fun instr ->

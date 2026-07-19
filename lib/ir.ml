@@ -1,7 +1,7 @@
 (** 高级中间表示 (IR) 定义与 AST -> IR 翻译 *)
 
 open Ast
-
+open LoopInfo
 (* ---- IR 操作数 ---- *)
 type operand =
   | Imm of int          (* 立即数 *)
@@ -37,6 +37,7 @@ type var_info = {
   is_global: bool;     (* 是否为全局变量 *)
   ir_name:string;
 }
+
 
 module StringMap = Map.Make(String)
 type symbol_table = var_info StringMap.t
@@ -360,34 +361,39 @@ and translate_stmt (s : Ast.stmt) : ir_instr list =
   
   (* while 循环 *)
   | Ast.While (cond, body) ->
-      let loop_start = fresh_label "while_start" in
-      let loop_body = fresh_label "while_body" in
-      let loop_end = fresh_label "while_end" in
-      
-      enter_loop loop_start loop_end;
-      
-      let (cond_instrs, cond_result) = translate_expr cond in
-      let body_instrs = translate_stmt body in
-      
-      exit_loop ();
-      
-      [Label loop_start] @
-      cond_instrs @
-      [BranchZero (cond_result, loop_end);
-       Label loop_body] @
-      body_instrs @
-      [Jump loop_start;
-       Label loop_end]
+    let loop_start = fresh_label "while_start" in
+    let loop_body = fresh_label "while_body" in
+    let loop_end = fresh_label "while_end" in
+
+    enter_loop loop_start loop_end;
+    (* 注册循环信息：header=start, body=body, exit=end, latch=body, cont=start, break=end *)
+    register_loop loop_start loop_body loop_end loop_body loop_start loop_end;
+     Printf.eprintf "[LOOP] registered header=%s body=%s exit=%s\n"
+      loop_start loop_body loop_end;
+    let (cond_instrs, cond_result) = translate_expr cond in
+    let body_instrs = translate_stmt body in
+    exit_loop ();
+
+    [Label loop_start] @ cond_instrs @
+    [BranchZero (cond_result, loop_end);
+     Label loop_body] @ body_instrs @
+    [Jump loop_start;
+     Label loop_end]
   
-  | Ast.Break ->
-      (match current_loop () with
-       | None -> failwith "break outside of loop"
-       | Some ctx -> [Jump ctx.break_label])
-  
-  | Ast.Continue ->
-      (match current_loop () with
-       | None -> failwith "continue outside of loop"
-       | Some ctx -> [Jump ctx.continue_label])
+ | Ast.Break ->
+    (match current_loop () with
+     | None -> failwith "break outside of loop"
+     | Some ctx ->
+         (* 当前循环的 header 就是 continue_label *)
+         mark_loop_has_break_continue ctx.continue_label;
+         [Jump ctx.break_label])
+
+| Ast.Continue ->
+    (match current_loop () with
+     | None -> failwith "continue outside of loop"
+     | Some ctx ->
+         mark_loop_has_break_continue ctx.continue_label;
+         [Jump ctx.continue_label])
 
 
 (* 短路求值 + 函数调用 + 全局变量访问 *)

@@ -51,3 +51,4 @@ let cfg_to_linear (cfg : t) : ir_instr list =
     in
     (Ir.Label lbl) :: blk.instrs @ term_instrs
   ) cfg.labels
+  

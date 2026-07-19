@@ -1,13 +1,10 @@
-(** 寄存器分配 - 基于活跃变量分析的线性扫描算法 *)
-
+(* 寄存器分配 - 基于活跃变量分析的线性扫描算法 *)
 open Riscv
-
 type alloc_function = {
   name   : string;
   instrs : mach_instr list;
 }
-
-(** 可用的物理寄存器池 *)
+(* 可用的物理寄存器池 *)
 let temp_regs = ["t0"; "t1"; "t2"; "t3"; "t4"; "t5"; "t6"]
 let saved_regs = ["s1"; "s2"; "s3"; "s4"; "s5"; "s6"; "s7"; "s8"; "s9"; "s10"; "s11"]
  let available_regs = saved_regs @ temp_regs (* s寄存器优先 *)
@@ -41,8 +38,15 @@ let get_vreg_id = function
 let is_spilled vreg =
   not (Hashtbl.mem reg_map vreg)
 
+(* 兼容旧版 OCaml 的 Hashtbl.modify_def *)
+let hashtbl_modify_def tbl key f =
+  let current = try Some (Hashtbl.find tbl key) with Not_found -> None in
+  let new_val = f current in
+  match new_val with
+  | Some v -> Hashtbl.replace tbl key v
+  | None -> Hashtbl.remove tbl key
 
-(** 从 register 提取 vreg id option *)
+  (** 从 register 提取 vreg id option *)
 let get_vreg_from_register = function
   | VReg id -> Some id
   | PhysReg _ -> None
@@ -84,35 +88,37 @@ let fresh_temp () =
   incr temp_counter;
   reg
 
+  (* 提取单条指令的所有物理寄存器名 *)
+let phys_reg_names_of_instr instr =
+  match instr with
+  | Label _ | J _ | Call _ | MRet
+  | FrameSetup _ | FrameTeardown _ -> []
+  | Li (rd, _) | La (rd, _) -> (match rd with PhysReg n -> [n] | _ -> [])
+  | Mv (rd, rs) | Addi (rd, rs, _)
+  | Neg (rd, rs) | Seqz (rd, rs) | Snez (rd, rs) ->
+      (match rd, rs with PhysReg r1, PhysReg r2 -> [r1; r2] | _ -> [])
+  | Lw (rd, _, rs) ->
+      (match rd, rs with PhysReg r1, PhysReg r2 -> [r1; r2] | _ -> [])
+  | Sw (rs, _, rd) ->
+      (match rs, rd with PhysReg r1, PhysReg r2 -> [r1; r2] | _ -> [])
+  | Add (rd, rs1, rs2) | Sub (rd, rs1, rs2) | Mul (rd, rs1, rs2)
+  | Div (rd, rs1, rs2) | Rem (rd, rs1, rs2)
+  | Slt (rd, rs1, rs2) | Sle (rd, rs1, rs2) | Sgt (rd, rs1, rs2)
+  | Sge (rd, rs1, rs2) | Seq (rd, rs1, rs2) | Sne (rd, rs1, rs2) ->
+      (match rd, rs1, rs2 with PhysReg r1, PhysReg r2, PhysReg r3 -> [r1; r2; r3] | _ -> [])
+  | Beqz (rs, _) | Bnez (rs, _) ->
+      (match rs with PhysReg n -> [n] | _ -> [])
+  | _ -> []
 (* 尾递归收集指令列表中所有物理寄存器名（不去重） *)
 let phys_reg_names_of_instrs instrs =
   let rec aux acc = function
     | [] -> acc
     | instr :: rest ->
-        let regs = match instr with
-          | Label _ | J _ | Call _ | MRet
-          | FrameSetup _ | FrameTeardown _ -> []
-          | Li (rd, _) | La (rd, _) -> [rd]
-          | Mv (rd, rs) | Addi (rd, rs, _)
-          | Neg (rd, rs) | Seqz (rd, rs) | Snez (rd, rs) -> [rd; rs]
-          | Lw (rd, _, rs) -> [rd; rs]
-          | Sw (rs, _, rd) -> [rs; rd]
-          | Add (rd, rs1, rs2) | Sub (rd, rs1, rs2)
-          | Mul (rd, rs1, rs2) | Div (rd, rs1, rs2)
-          | Rem (rd, rs1, rs2)
-          | Slt (rd, rs1, rs2) | Sle (rd, rs1, rs2)
-          | Sgt (rd, rs1, rs2) | Sge (rd, rs1, rs2)
-          | Seq (rd, rs1, rs2) | Sne (rd, rs1, rs2) -> [rd; rs1; rs2]
-          | Beqz (rs, _) | Bnez (rs, _) -> [rs]
-          | _ -> []   (* 安全网 *)
-        in
-        let names = List.filter_map (function PhysReg n -> Some n | VReg _ -> None) regs in
+        let names = phys_reg_names_of_instr instr in
         aux (names @ acc) rest
   in
   aux [] instrs
-  
 (** ========== 3. 活跃区间计算 ========== *)
-
 let compute_live_intervals (instrs : mach_instr list) : live_interval list =
   let first_use = Hashtbl.create 128 in
   let last_use = Hashtbl.create 128 in
@@ -142,7 +148,6 @@ let compute_live_intervals (instrs : mach_instr list) : live_interval list =
   List.sort (fun a b -> compare a.start_pos b.start_pos) !intervals
 
 (** ========== 4. 线性扫描核心 ========== *)
-
 let linear_scan_allocation (intervals : live_interval list) : unit =
   let active = ref [] in
   let free_regs = ref (List.mapi (fun i r -> (i, r)) available_regs) in
@@ -382,10 +387,88 @@ let apply_allocation (instrs : mach_instr list) (spill_size : int) : mach_instr 
   
   List.concat_map transform_instr instrs
 
-  
-(** ========== 7. 主入口函数 ========== *)
+(* ========== 轻量级 Move 消除窥孔 ========== *)
+let peephole_move_elimination (instrs : mach_instr list) : mach_instr list =
+  (* 维护物理寄存器之间的别名映射：rd 的真实来源寄存器名字 *)
+  let alias : (string, string) Hashtbl.t = Hashtbl.create 16 in
 
+  (* 查找寄存器的最终别名 *)
+  let resolve reg =
+    match reg with
+    | PhysReg name ->
+        (try PhysReg (Hashtbl.find alias name) with Not_found -> reg)
+    | other -> other
+  in
+
+  let rec transform acc = function
+    | [] -> List.rev acc
+    | Mv (PhysReg rd, src) :: rest ->
+        let src' = resolve src in
+        if src' = PhysReg rd then
+          (* 无意义 move，直接丢弃 *)
+          transform acc rest
+        else begin
+          Hashtbl.remove alias rd;
+          (match src' with
+           | PhysReg name -> Hashtbl.add alias rd name
+           | _ -> ());
+          transform (Mv (PhysReg rd, src') :: acc) rest
+        end
+   | ((Label _ | J _ | Beqz _ | Bnez _ | Call _) as instr) :: rest ->
+    Hashtbl.clear alias;
+    let instr' =
+      match instr with
+      | Beqz (rs, l) -> Beqz (resolve rs, l)
+      | Bnez (rs, l) -> Bnez (resolve rs, l)
+      | _ -> instr
+    in
+    transform (instr' :: acc) rest
+    | instr :: rest ->
+        (* 清除所有被定义的物理寄存器的别名映射 *)
+        let defs : string list = match instr with
+          | Li (PhysReg rd, _) | La (PhysReg rd, _)
+          | Addi (PhysReg rd, _, _) | Mv (PhysReg rd, _)
+          | Lw (PhysReg rd, _, _) | Add (PhysReg rd, _, _)
+          | Sub (PhysReg rd, _, _) | Mul (PhysReg rd, _, _)
+          | Div (PhysReg rd, _, _) | Rem (PhysReg rd, _, _)
+          | Neg (PhysReg rd, _) | Seqz (PhysReg rd, _) | Snez (PhysReg rd, _)
+          | Slt (PhysReg rd, _, _) | Sle (PhysReg rd, _, _)
+          | Sgt (PhysReg rd, _, _) | Sge (PhysReg rd, _, _)
+          | Seq (PhysReg rd, _, _) | Sne (PhysReg rd, _, _) -> [rd]
+          | _ -> []
+        in
+        List.iter (fun r -> Hashtbl.remove alias r) defs;
+        (* 替换所有源操作数为其别名 *)
+        let instr' = match instr with
+          | Addi (rd, rs, imm) -> Addi (rd, resolve rs, imm)
+          | Mv (rd, rs) -> Mv (rd, resolve rs)
+          | Lw (rd, off, rs) -> Lw (rd, off, resolve rs)
+          | Sw (rs, off, rd) -> Sw (resolve rs, off, resolve rd)
+          | Add (rd, rs1, rs2) -> Add (rd, resolve rs1, resolve rs2)
+          | Sub (rd, rs1, rs2) -> Sub (rd, resolve rs1, resolve rs2)
+          | Mul (rd, rs1, rs2) -> Mul (rd, resolve rs1, resolve rs2)
+          | Div (rd, rs1, rs2) -> Div (rd, resolve rs1, resolve rs2)
+          | Rem (rd, rs1, rs2) -> Rem (rd, resolve rs1, resolve rs2)
+          | Neg (rd, rs) -> Neg (rd, resolve rs)
+          | Seqz (rd, rs) -> Seqz (rd, resolve rs)
+          | Snez (rd, rs) -> Snez (rd, resolve rs)
+          | Slt (rd, rs1, rs2) -> Slt (rd, resolve rs1, resolve rs2)
+          | Sle (rd, rs1, rs2) -> Sle (rd, resolve rs1, resolve rs2)
+          | Sgt (rd, rs1, rs2) -> Sgt (rd, resolve rs1, resolve rs2)
+          | Sge (rd, rs1, rs2) -> Sge (rd, resolve rs1, resolve rs2)
+          | Seq (rd, rs1, rs2) -> Seq (rd, resolve rs1, resolve rs2)
+          | Sne (rd, rs1, rs2) -> Sne (rd, resolve rs1, resolve rs2)
+          | Beqz (rs, lbl) -> Beqz (resolve rs, lbl)
+          | Bnez (rs, lbl) -> Bnez (resolve rs, lbl)
+          | _ -> instr
+        in
+        transform (instr' :: acc) rest
+  in
+  transform [] instrs
+
+  (** ========== 7. 主入口函数 ========== *)
 let allocate_registers (mfunc : Select.machine_func) : alloc_function =
+
   (* 初始化 *)
   init_allocator ();
   
@@ -431,4 +514,6 @@ let allocate_registers (mfunc : Select.machine_func) : alloc_function =
       | _ -> true
     ) new_instrs
   in
- { name = mfunc.name; instrs = filtered_instrs }
+    let optimized_instrs = peephole_move_elimination filtered_instrs in
+  { name = mfunc.name; instrs = optimized_instrs }
+

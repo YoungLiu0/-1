@@ -1,5 +1,6 @@
 open Ir
 open Cfg
+
 (* ========== 辅助函数 ========== *)
 (* 判断指令是否有副作用（不可删除） *)
 let has_side_effect = function
@@ -299,7 +300,7 @@ let dead_code_elimination (cfg : Cfg.t) : Cfg.t =
   | None -> false
 in
 let is_dead = match def_var with
-  | Some v -> not (List.mem v live_after) && not (has_side_effect instr)
+  | Some v -> not (List.mem v live_after) && not (has_side_effect instr) && not (is_temp_def (Some v))
   | None -> false
           in
           if is_dead then

@@ -51,58 +51,58 @@ let unroll_one_loop loop (instrs : ir_instr list) : ir_instr list =
   let body_lbl   = loop.LoopInfo.body in
   let exit_lbl   = loop.LoopInfo.exit in
 
-  let hdr_idx = match find_label_index header_lbl instrs with
-    | Some i -> i | None -> failwith "header label not found"
-  in
-  let body_idx = match find_label_index body_lbl instrs with
-    | Some i -> i | None -> failwith "body label not found"
-  in
-   Printf.eprintf "[UNROLL] labels found: hdr=%d body=%d\n" hdr_idx body_idx;
-  let header_slice = List.filteri (fun i _ -> i >= hdr_idx && i < body_idx) instrs in
-  let (cond_instrs, cond_result) =
-    match List.rev header_slice with
-    | (BranchZero (cond, lab)) :: rest when lab = exit_lbl -> (List.rev rest, cond)
-    | _ -> failwith "unexpected while header"
-  in
-(* 过滤掉 header 中的 Label 指令，避免重复标签 *)
-let cond_instrs = List.filter (function Label _ -> false | _ -> true) cond_instrs in
-  let exit_idx_opt = find_label_index exit_lbl instrs in
-  let after_body = match exit_idx_opt with Some i -> i | None -> List.length instrs in
-  let body_slice = List.filteri (fun i _ -> i >= body_idx && i < after_body) instrs in
-  let (body_core, ends_correctly) =
-    match List.rev body_slice with
-    | (Jump lab) :: rest when lab = header_lbl -> (List.rev rest, true)
-    | _ -> (body_slice, false)
-  in
-
-  (* ---------- 新增检查：如果循环体或条件指令中含有 Call，则放弃展开 ---------- *)
-  let has_call = List.exists (function Call _ -> true | _ -> false) (cond_instrs @ body_core) in
-    Printf.eprintf "[UNROLL] body ends_correctly=%b has_call=%b\n" ends_correctly has_call;
-  if has_call then (Printf.eprintf "[UNROLL] skipped due to call\n"; instrs)  (* 直接返回原指令，不展开 *)
-  else if not ends_correctly then(Printf.eprintf "[UNROLL] skipped: body structure unexpected\n"; instrs)
-  else begin
-     Printf.eprintf "[UNROLL] performing unroll...\n";
-    Hashtbl.clear temp_rename_map;
-    let new_cond_instrs = List.map rename_instr cond_instrs in
-    let new_cond = rename_op cond_result in
-    let new_body_lbl = fresh_label "unrolled_body" in
-    let modified_body =
-      body_core @ new_cond_instrs @
-      [BranchZero (new_cond, exit_lbl); Jump new_body_lbl]
-    in
-  (* 去掉原 body 中的 Label 指令，避免标签重复 *)
-let new_body_core =
-  List.filter (function Label _ -> false | _ -> true) body_core
-  |> List.map rename_instr
-in
-    let unrolled_block =
-      Label new_body_lbl :: new_body_core @ [Jump header_lbl]
-    in
-    let prefix = List.filteri (fun i _ -> i < body_idx) instrs in
-    let suffix = List.filteri (fun i _ -> i >= after_body) instrs in
-    prefix @ modified_body @ unrolled_block @ suffix
-  end
-(* ========== 主展开函数 ========== *)
+  match find_label_index header_lbl instrs with
+  | None ->
+      Printf.eprintf "[UNROLL] warning: header label %s not found, skipping\n" header_lbl;
+      instrs
+  | Some hdr_idx ->
+  match find_label_index body_lbl instrs with
+  | None ->
+      Printf.eprintf "[UNROLL] warning: body label %s not found, skipping\n" body_lbl;
+      instrs
+  | Some body_idx ->
+      Printf.eprintf "[UNROLL] labels found: hdr=%d body=%d\n" hdr_idx body_idx;
+      let header_slice = List.filteri (fun i _ -> i >= hdr_idx && i < body_idx) instrs in
+      match List.rev header_slice with
+      | (BranchZero (cond, lab)) :: rest when lab = exit_lbl ->
+          let cond_instrs = List.rev rest in
+          let cond_instrs = List.filter (function Label _ -> false | _ -> true) cond_instrs in
+          let exit_idx_opt = find_label_index exit_lbl instrs in
+          let after_body = match exit_idx_opt with Some i -> i | None -> List.length instrs in
+          let body_slice = List.filteri (fun i _ -> i >= body_idx && i < after_body) instrs in
+          let (body_core, ends_correctly) =
+            match List.rev body_slice with
+            | (Jump lab) :: rest when lab = header_lbl -> (List.rev rest, true)
+            | _ -> (body_slice, false)
+          in
+          let has_call = List.exists (function Call _ -> true | _ -> false) (cond_instrs @ body_core) in
+          Printf.eprintf "[UNROLL] body ends_correctly=%b has_call=%b\n" ends_correctly has_call;
+          if has_call then (Printf.eprintf "[UNROLL] skipped due to call\n"; instrs)
+          else if not ends_correctly then (Printf.eprintf "[UNROLL] skipped: body structure unexpected\n"; instrs)
+          else begin
+            Printf.eprintf "[UNROLL] performing unroll...\n";
+            Hashtbl.clear temp_rename_map;
+            let new_cond_instrs = List.map rename_instr cond_instrs in
+            let new_cond = rename_op cond in
+            let new_body_lbl = fresh_label "unrolled_body" in
+            let modified_body =
+              body_core @ new_cond_instrs @
+              [BranchZero (new_cond, exit_lbl); Jump new_body_lbl]
+            in
+            let new_body_core =
+              List.filter (function Label _ -> false | _ -> true) body_core
+              |> List.map rename_instr
+            in
+            let unrolled_block =
+              Label new_body_lbl :: new_body_core @ [Jump header_lbl]
+            in
+            let prefix = List.filteri (fun i _ -> i < body_idx) instrs in
+            let suffix = List.filteri (fun i _ -> i >= after_body) instrs in
+            prefix @ modified_body @ unrolled_block @ suffix
+          end
+      | _ ->
+          Printf.eprintf "[UNROLL] warning: unexpected header structure in %s, skipping\n" header_lbl;
+          instrs (* ========== 主展开函数 ========== *)
 let unroll_all_loops (instrs : ir_instr list) : ir_instr list =
   let loops = LoopInfo.all_loops () in
    Printf.eprintf "[UNROLL] total loops found: %d\n" (List.length loops);
